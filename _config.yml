@@ -1,4 +1,4 @@
-title: "My Blogs Name"
+title: "Machine Learning, Neural Networks, cloud et al."
 author: "Marek Małek"
 description: "Blog about everything I encounter daily - web frameworks, both frontend and backed, AWS, Azure, Machine Learning & AI, and DevOps"
 email: "marek.blogs.about.everything@gmail.com"
@@ -7,7 +7,7 @@ email: "marek.blogs.about.everything@gmail.com"
 ######### Nothing below needs to be changed (unless you know what you're doing) #########
 #########################################################################################
 theme: "minima"
-title: Marek's homepage
+title: Machine Learning, Neural Networks, cloud et al.
 description: Bookmark this to keep an eye on my blog updates!
 rss: rss
 
