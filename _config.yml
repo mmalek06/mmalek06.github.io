@@ -1,4 +1,4 @@
-title: "Machine Learning, Neural Networks, cloud et al."
+title: "Machine Learning, Neural Networks, Cloud, et al."
 author: "Marek Małek"
 description: "Welcome to my blog, where I document my daily encounters with a wide range of technologies. From web frameworks (both frontend and backend) to AWS, Azure, Machine Learning & AI, and DevOps, I cover it all. As a technological polyglot, I've worked with and learned about an extensive array of technologies. This blog serves as a personal repository to help me remember and share my experiences."
 email: "marek.blogs.about.everything@gmail.com"
@@ -7,7 +7,7 @@ email: "marek.blogs.about.everything@gmail.com"
 ######### Nothing below needs to be changed (unless you know what you're doing) #########
 #########################################################################################
 theme: "minima"
-title: Machine Learning, Neural Networks, cloud et al.
+title: Machine Learning, Neural Networks, Cloud, et al.
 description: Bookmark this to keep an eye on my blog updates!
 rss: rss
 
