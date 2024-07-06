@@ -1,2 +1,1 @@
-This is a blog about everything I encounter daily - web frameworks, both frontend and backed, AWS, Azure, Machine Learning & AI, DevOps. Since I'm a 
-technological polyglot, the list of technologies I worked with, or learned about is very long, and the main purpose of this blog is to help me remember.
+Welcome to my blog, where I document my daily encounters with a wide range of technologies. From web frameworks (both frontend and backend) to AWS, Azure, Machine Learning & AI, and DevOps, I cover it all. As a technological polyglot, I've worked with and learned about an extensive array of technologies. This blog serves as a personal repository to help me remember and share my experiences.
