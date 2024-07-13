@@ -61,6 +61,7 @@ class BoundingBoxModel(nn.Module):
 ```
 
 This function combines two other ones that are widely known MAE and MSE. If the error is small, as given by the first branch of the formula, MSE is used, if it's big, MAE is used. The main selling point of this function, at least to me, is that because of the use of MAE, Huber Loss function prevents very large prediction errors to disproportionatelly affect the overall loss - in certain extreme cases it could slow the model convergence greatly.
+Also, the number `1` you see at the end of the first branch is a threshold parameter that you can pick to have different value. The default is `1` though.
 
 ### CIoU loss
 
