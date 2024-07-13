@@ -235,6 +235,6 @@ print("Training complete")
 
 ## Summary and next steps
 
-In the <a href="mmalek06.github.io/2024-07-05-running-jupyter-notebook-in-a-loop.html">previous post</a>, I described the process of running notebooks multiple times. I employed that approach for running this model. It has been run 20 times, and the best model achieved a loss of 5.89 (and a CIoU loss of 0.23). Those numbers alone don't say much, so to give more context—most lesions visible in the images from the test set were correctly boxed.
+In the [previous post](mmalek06.github.io/2024-07-05-running-jupyter-notebook-in-a-loop.html), I described the process of running notebooks multiple times. I employed that approach for running this model. It has been run 20 times, and the best model achieved a loss of 5.89 (and a CIoU loss of 0.23). Those numbers alone don't say much, so to give more context—most lesions visible in the images from the test set were correctly boxed.
 
 In the next post, I'll describe a larger variation of this model, as well as the CIoU loss function used as an alternative to SmoothL1Loss.
