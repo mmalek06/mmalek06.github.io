@@ -52,13 +52,13 @@ class BoundingBoxModel(nn.Module):
 
 ### SmoothL1Loss (Huber loss) formula and explanation
 
-```latex
+$$\begin{aligned}
 \text{SmoothL1Loss}(x, y) =
 \begin{cases} 
 (x - y)^2 & \text{if } |x - y| < 1 \\
 |x - y| & \text{otherwise}
 \end{cases}
-```
+\end{aligned}$$
 
 This function combines two other ones that are widely known MAE and MSE. If the error is small, as given by the first branch of the formula, MSE is used, if it's big, MAE is used. The main selling point of this function, at least to me, is that because of the use of MAE, Huber Loss function prevents very large prediction errors to disproportionatelly affect the overall loss - in certain extreme cases it could slow the model convergence greatly.
 Also, the number `1` you see at the end of the first branch is a threshold parameter that you can pick to have different value. The default is `1` though.
