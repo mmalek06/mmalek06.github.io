@@ -152,21 +152,27 @@ class CIoULoss(nn.Module):
 Although I try to not include too much math in my ML/AI efforts, sometimes it's unavoidable. And certainly if I see the above blob of code in 3 months, I won't remember what does it do, and mathematical formulation of the above can be helpful:
 
 $$\begin{aligned}
-% IoU formula
+$$
 \text{IoU} = \frac{\text{Intersection Area}}{\text{Union Area}} = \frac{|B_p \cap B_g|}{|B_p \cup B_g|}
+$$
 
-% CIoU formula
+$$
 \text{CIoU} = \text{IoU} - \left( \frac{\rho^2(\mathbf{b}, \mathbf{b}^g)}{c^2} + \alpha v \right)
+$$
 
-% Center Distance
+$$
 \rho^2(\mathbf{b}, \mathbf{b}^g) = (b_x - b_x^g)^2 + (b_y - b_y^g)^2
+$$
 
-% Enclosing Box Diagonal
+$$
 c^2 = (c_x - c_x^g)^2 + (c_y - c_y^g)^2
+$$
 
-% Aspect Ratio Consistency
+$$
 v = \frac{4}{\pi^2} \left( \arctan \frac{w^g}{h^g} - \arctan \frac{w}{h} \right)^2
+$$
 
-% Trade-off Parameter
+$$
 \alpha = \frac{v}{(1 - \text{IoU}) + v}
+$$
 \end{aligned}$$
