@@ -151,7 +151,7 @@ class CIoULoss(nn.Module):
 
 Although I try to not include too much math in my ML/AI efforts, sometimes it's unavoidable. And certainly if I see the above blob of code in 3 months, I won't remember what does it do, and mathematical formulation of the above can be helpful:
 
-```latex
+$$\begin{aligned}
 % IoU formula
 \text{IoU} = \frac{\text{Intersection Area}}{\text{Union Area}} = \frac{|B_p \cap B_g|}{|B_p \cup B_g|}
 
@@ -169,4 +169,4 @@ v = \frac{4}{\pi^2} \left( \arctan \frac{w^g}{h^g} - \arctan \frac{w}{h} \right)
 
 % Trade-off Parameter
 \alpha = \frac{v}{(1 - \text{IoU}) + v}
-```
+\end{aligned}$$
