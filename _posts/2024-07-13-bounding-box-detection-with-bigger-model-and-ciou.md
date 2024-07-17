@@ -170,7 +170,6 @@ $$\begin{aligned}
 \text{6.}\alpha = \frac{v}{(1 - \text{IoU}) + v}
 \end{aligned}$$
 </div>
-<br /><br />
 
 Starting from the top:
 
