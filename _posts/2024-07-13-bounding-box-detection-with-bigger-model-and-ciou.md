@@ -152,22 +152,22 @@ Although I try to avoid including too much math in my ML/AI efforts, sometimes i
 
 <div>
 $$\begin{aligned}
-\text{1. IoU} = \frac{\text{Intersection Area}}{\text{Union Area}} = \frac{|B_p \cap B_g|}{|B_p \cup B_g|}
+\text{1.  IoU} = \frac{\text{Intersection Area}}{\text{Union Area}} = \frac{|B_p \cap B_g|}{|B_p \cup B_g|}
 \end{aligned}$$
 $$\begin{aligned}
-\text{2. CIoU} = \text{IoU} - \left( \frac{\rho^2(\mathbf{b}, \mathbf{b}^g)}{c^2} + \alpha v \right)
+\text{2.  CIoU} = \text{IoU} - \left( \frac{\rho^2(\mathbf{b}, \mathbf{b}^g)}{c^2} + \alpha v \right)
 \end{aligned}$$
 $$\begin{aligned}
-\text{3.}\rho^2(\mathbf{b}, \mathbf{b}^g) = (b_x - b_x^g)^2 + (b_y - b_y^g)^2
+\text{3.  }\rho^2(\mathbf{b}, \mathbf{b}^g) = (b_x - b_x^g)^2 + (b_y - b_y^g)^2
 \end{aligned}$$
 $$\begin{aligned}
-\text{4.}c^2 = (c_x - c_x^g)^2 + (c_y - c_y^g)^2
+\text{4.  }c^2 = (c_x - c_x^g)^2 + (c_y - c_y^g)^2
 \end{aligned}$$
 $$\begin{aligned}
-\text{5.}v = \frac{4}{\pi^2} \left( \arctan \frac{w^g}{h^g} - \arctan \frac{w}{h} \right)^2
+\text{5.  }v = \frac{4}{\pi^2} \left( \arctan \frac{w^g}{h^g} - \arctan \frac{w}{h} \right)^2
 \end{aligned}$$
 $$\begin{aligned}
-\text{6.}\alpha = \frac{v}{(1 - \text{IoU}) + v}
+\text{6.  }\alpha = \frac{v}{(1 - \text{IoU}) + v}
 \end{aligned}$$
 </div>
 
@@ -180,6 +180,6 @@ These two are what constitute the IoU metric. If the predicted bounding box and 
 2. CIoU calculation subtracts the sum of the squared Euclidean distance between the center points of the predicted and ground truth boxes (normalized by the squared diagonal length of the smallest enclosing box that can cover both the predicted and ground truth bounding boxes) and the aspect ratio.
 That's a long sentence with many details, so let's see the next equations.
 
-3. The \(\rho^2\) term penalizes the distance between the centers of the two bounding boxes. The numbers are squared to avoid non-negativity and penalize larger distances. This way, the model is trained to correct larger errors more aggressively.
+3. The $$\(\rho^2\)$$ term penalizes the distance between the centers of the two bounding boxes. The numbers are squared to avoid non-negativity and penalize larger distances. This way, the model is trained to correct larger errors more aggressively.
 
-4. The \(c^2\) term is used to normalize the Euclidean distance calculation result.
+4. The $$\(c^2\)$$ term is used to normalize the Euclidean distance calculation result.
