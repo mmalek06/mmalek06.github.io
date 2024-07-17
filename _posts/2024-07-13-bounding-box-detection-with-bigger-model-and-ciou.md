@@ -173,9 +173,7 @@ $$\begin{aligned}
 
 Starting from the top:
 
-1. IoU calculation consists of dividing the Intersection Area (the area of the overlap between the actual and predicted bounding boxes) by the Union Area (the total area covered by the actual and predicted box minus the intersection area).
-
-These two are what constitute the IoU metric. If the predicted bounding box and the ground truth bounding box overlap, this metric will give a value closer to 1; otherwise, it will be closer to 0. The CIoU metric adds two more factors: the centers of the predicted bounding boxes and their aspect ratios. The purpose is to offer richer gradient information, which may help the neural network converge faster.
+1. IoU calculation consists of dividing the Intersection Area (the area of the overlap between the actual and predicted bounding boxes) by the Union Area (the total area covered by the actual and predicted box minus the intersection area). These two are what constitute the IoU metric. If the predicted bounding box and the ground truth bounding box overlap, this metric will give a value closer to 1; otherwise, it will be closer to 0. The CIoU metric adds two more factors: the centers of the predicted bounding boxes and their aspect ratios. The purpose is to offer richer gradient information, which may help the neural network converge faster.
 
 2. CIoU calculation subtracts the sum of the squared Euclidean distance between the center points of the predicted and ground truth boxes (normalized by the squared diagonal length of the smallest enclosing box that can cover both the predicted and ground truth bounding boxes) and the aspect ratio.
 That's a long sentence with many details, so let's see the next equations.
