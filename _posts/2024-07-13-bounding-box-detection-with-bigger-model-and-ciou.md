@@ -180,6 +180,6 @@ These two are what constitute the IoU metric. If the predicted bounding box and 
 2. CIoU calculation subtracts the sum of the squared Euclidean distance between the center points of the predicted and ground truth boxes (normalized by the squared diagonal length of the smallest enclosing box that can cover both the predicted and ground truth bounding boxes) and the aspect ratio.
 That's a long sentence with many details, so let's see the next equations.
 
-3. The $$\(\rho^2\)$$ term penalizes the distance between the centers of the two bounding boxes. The numbers are squared to avoid non-negativity and penalize larger distances. This way, the model is trained to correct larger errors more aggressively.
+3. The $\(\rho^2\)$ term penalizes the distance between the centers of the two bounding boxes. The numbers are squared to avoid non-negativity and penalize larger distances. This way, the model is trained to correct larger errors more aggressively.
 
-4. The $$\(c^2\)$$ term is used to normalize the Euclidean distance calculation result.
+4. The $\(c^2\)$ term is used to normalize the Euclidean distance calculation result.
