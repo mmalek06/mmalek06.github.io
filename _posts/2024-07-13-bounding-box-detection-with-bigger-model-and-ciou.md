@@ -6,7 +6,7 @@ This time I'll go straight into the code, because the most of this notebook has 
 
 ### Bigger variation
 
-If you read the previous post, you'll notice that the only difference between the architecture used there and this one is that the `conv2`, and `conv3` layers `in_channels` param gets a higher value.
+If you read the previous post, you'll notice that the only difference between the architecture used there and this one is that the `conv2` and `conv3` layers' `in_channels` parameter has a higher value.
 
 ```python
 import torch
@@ -60,12 +60,11 @@ $$\begin{aligned}
 \end{cases}
 \end{aligned}$$
 
-This function combines two other ones that are widely known MAE and MSE. If the error is small, as given by the first branch of the formula, MSE is used, if it's big, MAE is used. The main selling point of this function, at least to me, is that because of the use of MAE, Huber Loss function prevents very large prediction errors to disproportionatelly affect the overall loss - in certain extreme cases it could slow the model convergence greatly.
-Also, the number `1` you see at the end of the first branch is a threshold parameter that you can pick to have different value. The default is `1` though.
+This function combines two widely known loss functions: MAE and MSE. If the error is small, as given by the first branch of the formula, MSE is used; if it's large, MAE is used. The main advantage of this function is that the use of MAE prevents very large prediction errors from disproportionately affecting the overall loss, which in extreme cases can greatly slow model convergence. The number `1` at the end of the first branch is a threshold parameter that can be adjusted, though the default is `1`.
 
 ### CIoU loss
 
-The motivation for creation this loss function is that is more specific to the problem at hand. First the code:
+The motivation for creating this loss function is that it is more specific to the problem at hand. First, the code:
 
 ```python
 import torch
@@ -149,24 +148,39 @@ class CIoULoss(nn.Module):
 
 ```
 
-Although I try to not include too much math in my ML/AI efforts, sometimes it's unavoidable. And certainly if I see the above blob of code in 3 months, I won't remember what does it do, and mathematical formulation of the above can be helpful:
+Although I try to avoid including too much math in my ML/AI efforts, sometimes it's unavoidable. Seeing the above blob of code in 3 months, I might not remember what it does, so this mathematical formulation can be helpful:
 
 <div>
 $$\begin{aligned}
-\text{IoU} = \frac{\text{Intersection Area}}{\text{Union Area}} = \frac{|B_p \cap B_g|}{|B_p \cup B_g|}
+\text{1. IoU} = \frac{\text{Intersection Area}}{\text{Union Area}} = \frac{|B_p \cap B_g|}{|B_p \cup B_g|}
 \end{aligned}$$
 $$\begin{aligned}
-\text{CIoU} = \text{IoU} - \left( \frac{\rho^2(\mathbf{b}, \mathbf{b}^g)}{c^2} + \alpha v \right)
+\text{2. CIoU} = \text{IoU} - \left( \frac{\rho^2(\mathbf{b}, \mathbf{b}^g)}{c^2} + \alpha v \right)
 \end{aligned}$$
 $$\begin{aligned}
-\rho^2(\mathbf{b}, \mathbf{b}^g) = (b_x - b_x^g)^2 + (b_y - b_y^g)^2
-c^2 = (c_x - c_x^g)^2 + (c_y - c_y^g)^2
+\text{3.}\rho^2(\mathbf{b}, \mathbf{b}^g) = (b_x - b_x^g)^2 + (b_y - b_y^g)^2
 \end{aligned}$$
 $$\begin{aligned}
-v = \frac{4}{\pi^2} \left( \arctan \frac{w^g}{h^g} - \arctan \frac{w}{h} \right)^2
+\text{4.}c^2 = (c_x - c_x^g)^2 + (c_y - c_y^g)^2
 \end{aligned}$$
 $$\begin{aligned}
-\alpha = \frac{v}{(1 - \text{IoU}) + v}
+\text{5.}v = \frac{4}{\pi^2} \left( \arctan \frac{w^g}{h^g} - \arctan \frac{w}{h} \right)^2
+\end{aligned}$$
+$$\begin{aligned}
+\text{6.}\alpha = \frac{v}{(1 - \text{IoU}) + v}
 \end{aligned}$$
 </div>
 <br /><br />
+
+Starting from the top:
+
+1. IoU calculation consists of dividing the Intersection Area (the area of the overlap between the actual and predicted bounding boxes) by the Union Area (the total area covered by the actual and predicted box minus the intersection area).
+
+These two are what constitute the IoU metric. If the predicted bounding box and the ground truth bounding box overlap, this metric will give a value closer to 1; otherwise, it will be closer to 0. The CIoU metric adds two more factors: the centers of the predicted bounding boxes and their aspect ratios. The purpose is to offer richer gradient information, which may help the neural network converge faster.
+
+2. CIoU calculation subtracts the sum of the squared Euclidean distance between the center points of the predicted and ground truth boxes (normalized by the squared diagonal length of the smallest enclosing box that can cover both the predicted and ground truth bounding boxes) and the aspect ratio.
+That's a long sentence with many details, so let's see the next equations.
+
+3. The \(\rho^2\) term penalizes the distance between the centers of the two bounding boxes. The numbers are squared to avoid non-negativity and penalize larger distances. This way, the model is trained to correct larger errors more aggressively.
+
+4. The \(c^2\) term is used to normalize the Euclidean distance calculation result.
