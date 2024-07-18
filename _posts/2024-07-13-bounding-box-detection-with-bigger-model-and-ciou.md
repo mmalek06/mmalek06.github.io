@@ -181,7 +181,7 @@ That's a long sentence with many details, so let's see the next equations.
 3. This term penalizes the distance between the centers of the two bounding boxes. The numbers are squared to avoid non-negativity and penalize larger distances. This way, the model is trained to correct larger errors more aggressively.
 
 4. This term is used to normalize the Euclidean distance calculation result. It's the squared diagonal length of the box enclosing the predicted and ground truth bounding boxes. If you divide the center distance by it, you'll get a value that lies inside the interval of [0, 1). It won't ever really reach `1` because the corners of the enclosing box will always be at at least slightly different coordinates than the centers of the bounding boxes. This normalization helps with:
-..* Numerical Stability: Ensures that the loss values do not become excessively large, maintaining a stable range of values.
-..* Proportional Penalty: Adjusts the penalty for center misalignment relative to the size of the bounding boxes, ensuring fairness across different scales.
-..* Balanced Loss Components: Prevents any single component of the loss from dominating, leading to a more balanced and effective optimization process.
-..* Consistent Gradients: Facilitates stable and consistent gradient updates, improving the convergence and performance of the model.
+    - Numerical Stability: Ensures that the loss values do not become excessively large, maintaining a stable range of values.
+    - Proportional Penalty: Adjusts the penalty for center misalignment relative to the size of the bounding boxes, ensuring fairness across different scales.
+    - Balanced Loss Components: Prevents any single component of the loss from dominating, leading to a more balanced and effective optimization process.
+    - Consistent Gradients: Facilitates stable and consistent gradient updates, improving the convergence and performance of the model.
