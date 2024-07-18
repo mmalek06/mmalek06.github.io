@@ -60,7 +60,7 @@ $$\begin{aligned}
 \end{cases}
 \end{aligned}$$
 
-This function combines two widely known loss functions: MAE and MSE. If the error is small, as given by the first branch of the formula, MSE is used; if it's large, MAE is used. The main advantage of this function is that the use of MAE prevents very large prediction errors from disproportionately affecting the overall loss, which in extreme cases can greatly slow model convergence. The number `1` at the end of the first branch is a threshold parameter that can be adjusted, though the default is `1`.
+This function combines two widely known loss functions: MAE and MSE. It was used in the previous notebook, and is explained here, so that the comparison between it and the CIoU loss is easier. If the error is small, as given by the first branch of the formula, MSE is used; if it's large, MAE is used. The main advantage of this function is that the use of MAE prevents very large prediction errors from disproportionately affecting the overall loss, which in extreme cases can greatly slow model convergence. The number `1` at the end of the first branch is a threshold parameter that can be adjusted, though the default is `1`.
 
 ### CIoU loss
 
@@ -177,7 +177,7 @@ Starting from the top:
 
 These two are what constitute the IoU metric. If the predicted bounding box and the ground truth bounding box overlap, this metric will give a value closer to 1; otherwise, it will be closer to 0. The CIoU metric adds two more factors: the centers of the predicted bounding boxes and their aspect ratios. The purpose is to offer richer gradient information, which may help the neural network converge faster.
 
-2. CIoU calculation subtracts the sum of the squared Euclidean distance between the center points of the predicted and ground truth boxes (normalized by the squared diagonal length of the smallest enclosing box that can cover both the predicted and ground truth bounding boxes) and the aspect ratio.
+2. CIoU calculation subtracts the sum of the squared Euclidean distance between the center points of the predicted and ground truth boxes (normalized by the squared diagonal length of the smallest enclosing box that can cover both the predicted and ground truth bounding boxes) and the aspect ratio from the IoU result.
 That's a long sentence with many details, so let's see the next equations.
 
 3. The \(\rho^2\) term penalizes the distance between the centers of the two bounding boxes. The numbers are squared to avoid non-negativity and penalize larger distances. This way, the model is trained to correct larger errors more aggressively.
