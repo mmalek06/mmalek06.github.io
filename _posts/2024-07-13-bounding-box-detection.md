@@ -51,7 +51,7 @@ optimizer = optim.Adam(model.parameters(), lr=0.001)
 
 ### Early stopping
 
-I think I could have used Keras, but since I'm learning PyTorch, I didn't want any additional tools to get in the way. Because of that, I decided to create an EarlyStopping class myself.
+I think I could have used Keras, but since I'm learning PyTorch, I didn't want any additional tools to get in the way. Because of that, I decided to create an EarlyStopping class myself. Its functionality is similar to the one found in the Keras library - if the metric value doesn't improve for certain amount of epochs the `early_stop` parameter gets set to `True` and the training loop will stop.
 
 ```python
 import torch
@@ -158,7 +158,7 @@ class BoundingBoxModel(nn.Module):
         return x
 ```
 
-It's the kind of standard code you would see on other blogs or that ChatGPT would create for you, given a simple problem. While building this project, I wasn't sure if this architecture would achieve at least 50% accuracy, especially since I had used the HAM10000 dataset before to train a classifier model with much larger architectures. As it turned out, it performs nicely. For this dataset and as a proof of concept, I'd say it does just fine. I don't think it's all worth describing, except for the _initialize_fc1 method.
+It's the kind of standard code you would see on other blogs or that ChatGPT would create for you, given a simple problem. While building this project, I wasn't sure if this architecture would achieve at least 50% accuracy, especially since I had used the HAM10000 dataset before to train a classifier model with much larger architectures. As it turned out, it performs nicely. For this dataset and as a proof of concept, I'd say it does just fine. I don't think it's all worth describing because of the overall simplicity, except for the _initialize_fc1 method.
 
 To create the fc1 layer, I would have to manually calculate the shape of the last layer before this one. If I wanted to change things inside, I'd have to rerun those calculations repeatedly. It's much better to do a "dry run" of the first layer and let PyTorch calculate that number instead.
 
