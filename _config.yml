@@ -9,6 +9,7 @@ email: "marek.blogs.about.everything@gmail.com"
 theme: "minima"
 title: Machine Learning, Neural Networks, Cloud, et al.
 description: Bookmark this to keep an eye on my blog updates!
+google_analytics: G-HJJYQJ9VNJ
 rss: rss
 
 kramdown:
