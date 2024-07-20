@@ -1,3 +1,8 @@
+layout: post
+title: Bounding box detection for HAM10000 dataset
+date: 2024-07-13 12:00:00 -0000
+categories: PyTorch, Computer-Vision, Python
+
 # Bounding box detection for HAM10000 dataset
 
 In my opinion, tasks like bounding box detection and image segmentation are among the most satisfying applications of computer vision. A model that can accurately pinpoint an interesting item in an image seems even more magical to me than one that performs classification across millions of classes. In this post, I'll describe the first part of a project aimed at creating a bounding box detection model based on the HAM10000 dataset.

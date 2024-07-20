@@ -1,3 +1,8 @@
+layout: post
+title: Bounding box detection for HAM10000 dataset with bigger model and CIoU loss function
+date: 2024-07-13 13:00:00 -0000
+categories: PyTorch, Computer-Vision, Python, Math
+
 # Bounding box detection for HAM10000 dataset with bigger model and CIoU loss function
 
 There are many loss functions commonly used in the object detection space of AI. SmoothL1Loss is the simplest one. Beyond that, there is a gradient of the *IoU family. In this variation of my simple model, I decided to use the CIoU loss function, as it is regarded as the best one in the family.

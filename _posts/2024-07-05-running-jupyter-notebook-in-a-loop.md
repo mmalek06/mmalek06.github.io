@@ -1,3 +1,8 @@
+layout: post
+title: Running Jupyter Notebooks in a loop
+date: 2024-07-05
+categories: PyTorch, Computer-Vision, Python
+
 # Running Jupyter Notebooks in a loop
 
 If you've ever experimented with training your own machine learning models (e.g., using PyTorch or TensorFlow), then you know how random their results can occasionally be. In one run, you might achieve 90% accuracy, while in another, the model could get stuck in a local minimum or reach 95% accuracy. Training and testing a model only once might not yield the most optimal result. Additionally, there's another argument against doing a single run: when you're conducting research, you may want to statistically determine which architecture among those you've developed is the most efficient or stable (e.g., consistently giving results in the 90%-95% range instead of varying widely). This information could guide your next steps.

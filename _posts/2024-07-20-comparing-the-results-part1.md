@@ -1,3 +1,8 @@
+layout: post
+title: Comparing models using SmoothL1Loss and CIoU loss functions
+date: 2024-07-20 12:00:00 -0000
+categories: PyTorch, Computer-Vision, Python
+
 # Comparing models using SmoothL1Loss and CIoU loss functions
 
 1. [Basic bounding box detection](https://mmalek06.github.io/2024/07/13/bounding-box-detection.html)
