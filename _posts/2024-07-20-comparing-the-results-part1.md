@@ -146,3 +146,10 @@ with torch.no_grad():
         <img style="float: right" src="https://mmalek06.github.io/images/ISIC_0024309_segmentation.png" />
     </span>
 </div>
+
+## Summary
+
+I attached six images: three are lesion images with predicted bounding boxes overlaid on top, and the other three are segmentation masks used to create the COCO file containing the x and y coordinates of the ground truth bounding boxes. Two of the models accurately predicted lesion locations, but one did not. If you look at the related segmentation mask, it seems it should locate a lesion close to the bottom-left corner of the image, but instead, it spanned almost to the top right corner. Why is that? On the attached lesion image, it's clear that there are actually two darker spots. This tells us two things:
+
+The presence of the other black spot confused the model.
+The model seems to "understand" that a lesion is usually different in color from the rest of the image, which is why it tries to box the second dark image element as well. This partially explains why such a simple architecture was able to achieve such low error rates—the task was relatively simple.
