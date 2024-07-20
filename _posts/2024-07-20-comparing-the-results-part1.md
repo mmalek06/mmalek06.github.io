@@ -1,8 +1,8 @@
 ---
 layout: post
 title: "Comparing models using SmoothL1Loss and CIoU loss functions"
-date: 2024-07-20 12:00:00 -0000
-categories: PyTorch Computer-Vision Python
+date: 2024-07-20 10:00:00 -0000
+categories: PyTorch ComputerVision Python
 ---
 
 # Comparing models using SmoothL1Loss and CIoU loss functions

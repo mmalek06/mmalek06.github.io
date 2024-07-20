@@ -2,7 +2,7 @@
 layout: post
 title: "Bounding box detection for HAM10000 dataset with bigger model and CIoU loss function"
 date: 2024-07-13 13:00:00 -0000
-categories: PyTorch Computer-Vision Python Math
+categories: PyTorch ComputerVision Python Math
 ---
 
 # Bounding box detection for HAM10000 dataset with bigger model and CIoU loss function
