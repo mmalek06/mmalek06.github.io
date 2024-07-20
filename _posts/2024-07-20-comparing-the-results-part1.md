@@ -129,16 +129,20 @@ with torch.no_grad():
 ```
 
 <div>
-    <span style="display: inline-block; width: 400px; margin: 0 auto">
-        <img src="https://mmalek06.github.io/images/ISIC_0024385.jpg" />
-        <img src="https://mmalek06.github.io/images/ISIC_0024385_segmentation.png" />
+    <span style="display: block; width: 420px; margin: 0 auto;">
+        <img style="float: left" src="https://mmalek06.github.io/images/ISIC_0024385.jpg" />
+        <img style="float: right" src="https://mmalek06.github.io/images/ISIC_0024385_segmentation.png" />
     </span>
 </div>
 <div>
-    <img src="https://mmalek06.github.io/images/ISIC_0024310.jpg" />
-    <img src="https://mmalek06.github.io/images/ISIC_0024310_segmentation.png" />
+    <span style="display: block; width: 420px; margin: 0 auto;">
+        <img style="float: left" src="https://mmalek06.github.io/images/ISIC_0024310.jpg" />
+        <img style="float: right" src="https://mmalek06.github.io/images/ISIC_0024310_segmentation.png" />
+    </span>
 </div>
 <div>
-    <img src="https://mmalek06.github.io/images/ISIC_0024309.jpg" />
-    <img src="https://mmalek06.github.io/images/ISIC_0024309_segmentation.png" />
+    <span style="display: block; width: 420px; margin: 0 auto;">
+        <img style="float: left" src="https://mmalek06.github.io/images/ISIC_0024309.jpg" />
+        <img style="float: right" src="https://mmalek06.github.io/images/ISIC_0024309_segmentation.png" />
+    </span>
 </div>
