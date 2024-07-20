@@ -48,7 +48,7 @@ data "external" "public_ip" {
 }
 ```
 
-The first declaration checks if the current platform is a Linux-based one. I needed to know that in the data sourcing step, to run the correct script for getting the IP. There are many ways to check the OS in terraform, but probably the shortest one is to check for the existence of `/home` directory. After that, it's time to create the db declaration:
+The first declaration checks if the current platform is Linux-based. I needed this information during the data sourcing step to run the correct script for getting the IP. There are many ways to check the OS in Terraform, but the shortest one is probably to check for the existence of the /home directory. After that, it’s time to create the DB declaration:
 
 ```plaintext
 resource "azurerm_postgresql_flexible_server" "passion_project_db" {
@@ -70,7 +70,7 @@ resource "azurerm_postgresql_flexible_server" "passion_project_db" {
 
 ```
 
-The above works, but if the PostgreSQL Flexible Server fails-over to the Standby Availability Zone, the zone will be updated to reflect the current Primary Availability Zone. The thing with Terraform is that a lot is happeninig under the hood. The above declaration doesn't explicitly set the availability zone, which means some default value will be used. If the fail-over happens, Terraform will see a change and it will decide to redeploy the resource. Thus, two databases will be created. To make that problem go away, a lifecycle section needs to be added to the end of the main resource declaration as mentioned in [Terraform docs](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/postgresql_flexible_server):
+The above works, but if the PostgreSQL Flexible Server fails-over to the Standby Availability Zone, the zone will be updated to reflect the current Primary Availability Zone. The thing with Terraform is that a lot happens under the hood. The above declaration doesn’t explicitly set the availability zone, meaning some default value will be used. If a fail-over occurs, Terraform will detect a change and decide to redeploy the resource, resulting in two databases being created. To prevent this issue, a lifecycle section needs to be added to the end of the main resource declaration, as mentioned in [Terraform docs](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/postgresql_flexible_server):
 
 ```plaintext
 resource "azurerm_postgresql_flexible_server" "passion_project_db" {
