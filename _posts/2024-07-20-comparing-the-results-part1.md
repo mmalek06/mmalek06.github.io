@@ -129,14 +129,16 @@ with torch.no_grad():
 ```
 
 <div>
-    <img src="https://mmalek06.github.io/images/ISIC_0024385.jpg" />
-    <img src="https://mmalek06.github.io/images/ISIC_0024385_segmentation.jpg" />
+    <span style="display: inline-block; width: 400px; margin: 0 auto">
+        <img src="https://mmalek06.github.io/images/ISIC_0024385.jpg" />
+        <img src="https://mmalek06.github.io/images/ISIC_0024385_segmentation.png" />
+    </span>
 </div>
 <div>
     <img src="https://mmalek06.github.io/images/ISIC_0024310.jpg" />
-    <img src="https://mmalek06.github.io/images/ISIC_0024310_segmentation.jpg" />
+    <img src="https://mmalek06.github.io/images/ISIC_0024310_segmentation.png" />
 </div>
 <div>
     <img src="https://mmalek06.github.io/images/ISIC_0024309.jpg" />
-    <img src="https://mmalek06.github.io/images/ISIC_0024309_segmentation.jpg" />
+    <img src="https://mmalek06.github.io/images/ISIC_0024309_segmentation.png" />
 </div>
