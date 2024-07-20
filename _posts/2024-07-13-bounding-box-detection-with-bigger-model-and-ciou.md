@@ -60,7 +60,7 @@ $$\begin{aligned}
 \end{cases}
 \end{aligned}$$
 
-This function combines two widely known loss functions: MAE and MSE. It was used in the previous notebook, and is explained here, so that the comparison between it and the CIoU loss is easier. If the error is small, as given by the first branch of the formula, MSE is used; if it's large, MAE is used. The main advantage of this function is that the use of MAE prevents very large prediction errors from disproportionately affecting the overall loss, which in extreme cases can greatly slow model convergence. The number `1` at the end of the first branch is a threshold parameter that can be adjusted, though the default is `1`.
+This function combines two widely known loss functions: MAE and MSE. It was used in the previous notebook, and is explained here, so that the comparison between it and the CIoU loss is easier. If the error is small, as given by the first branch of the formula, MSE is used; if it's large, MAE is used. The main advantage of this function is that the use of MAE prevents very large prediction errors from disproportionately affecting the overall loss, which in extreme cases can greatly slow model convergence. The number $$1$$ at the end of the first branch is a threshold parameter that can be adjusted, though the default is $$1$$.
 
 ### CIoU loss
 
@@ -180,10 +180,10 @@ That's a long sentence with many details, so let's see the next equations.
 
 3. This term penalizes the distance between the centers of the two bounding boxes. The numbers are squared to avoid non-negativity and penalize larger distances. This way, the model is trained to correct larger errors more aggressively.
 
-4. This term is used to normalize the Euclidean distance calculation result. It's the squared diagonal length of the box enclosing the predicted and ground truth bounding boxes. If you divide the center distance by it, you'll get a value that lies inside the interval of $$[0, 1)$$. It won't ever really reach 1 because the corners of the enclosing box will always be at at least slightly different coordinates than the centers of the bounding boxes. This normalization helps with:
+4. This term is used to normalize the Euclidean distance calculation result (that comes from step no.4). It's the squared diagonal length of the box enclosing the predicted and ground truth bounding boxes. If you divide the center distance by it, you'll get a value that lies inside the interval of $$[0, 1)$$. It won't ever really reach 1 because the corners of the enclosing box will always be at at least slightly different coordinates than the centers of the bounding boxes. This normalization helps with:
     - Numerical Stability: Ensures that the loss values do not become excessively large, maintaining a stable range of values.
     - Proportional Penalty: Adjusts the penalty for center misalignment relative to the size of the bounding boxes, ensuring fairness across different scales.
     - Balanced Loss Components: Prevents any single component of the loss from dominating, leading to a more balanced and effective optimization process.
-    - Consistent Gradients: Facilitates stable and consistent gradient updates, improving the convergence and performance of the model.
+    - Consistent Gradients: Facilitates stable and consistent gradient updates, improving the convergence and performance of the model.<br />
 
-5. Arctan function takes values from $$\pi^2$$ to $$-\pi^2$$ which means that its values are always normalized to this interval. The maximum difference between two arctan values is $$\pi$$. Then if you multiply out the $$\frac{4}{\pi^2}$$ by $$\pi^2$$ (which is the max result that can be obtained in the brackets) you'll get number 4.
+5. Arctan function takes values from $$\frac{\pi}{2}$$ to $$-\frac{\pi}{2}$$. The maximum difference between two arctan values is $$\pi$$. Then if you multiply out the $$\frac{4}{\pi^2}$$ by $$\pi^2$$ (which is the max result that can be obtained in the brackets) you'll get number 4.
