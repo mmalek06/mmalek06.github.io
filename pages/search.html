@@ -1,0 +1,33 @@
+---
+layout: default
+title: Search
+---
+
+<h1>Search by Categories</h1>
+<input type="text" id="search-box" placeholder="Search categories">
+<ul id="results"></ul>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    fetch("{{ site.baseurl }}/search.json")
+      .then(response => response.json())
+      .then(data => {
+        const searchBox = document.getElementById("search-box");
+        const resultsContainer = document.getElementById("results");
+
+        searchBox.addEventListener("input", function() {
+          const query = searchBox.value.toLowerCase();
+          const filteredPosts = data.filter(post =>
+            post.categories.toLowerCase().includes(query)
+          );
+
+          resultsContainer.innerHTML = '';
+          filteredPosts.forEach(post => {
+            const listItem = document.createElement("li");
+            listItem.innerHTML = `<a href="${post.url}">${post.title}</a>`;
+            resultsContainer.appendChild(listItem);
+          });
+        });
+      });
+  });
+</script>

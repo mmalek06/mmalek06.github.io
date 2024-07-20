@@ -29,3 +29,7 @@ defaults:
       type: post
     values:
       tags: Other
+
+include:
+  - search.json
+
