@@ -2,7 +2,8 @@
 layout: post
 title: "Running Jupyter Notebooks in a loop"
 date: 2024-07-05 00:00:00 -0000
-categories: PyTorch ComputerVision Python
+categories: Python
+tags: ["python", "jupyter notebooks"]
 ---
 
 # Running Jupyter Notebooks in a loop

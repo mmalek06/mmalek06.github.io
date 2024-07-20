@@ -2,7 +2,8 @@
 layout: post
 title: "Comparing models using SmoothL1Loss and CIoU loss functions"
 date: 2024-07-19 10:00:00 -0000
-categories: PyTorch ComputerVision Python
+categories: ComputerVision
+tags: ["computer vision", "pytorch", "python", "ai"]
 ---
 
 # Comparing models using SmoothL1Loss and CIoU loss functions
@@ -11,6 +12,8 @@ categories: PyTorch ComputerVision Python
 2. [Bounding box detection using CIoU loss](https://mmalek06.github.io/2024/07/13/bounding-box-detection-with-bigger-model-and-ciou.html)
 
 The two previous articles focused on two very similar models. One was trained using the SmoothL1Loss function, and the other using the CIoU loss function. Additionally, there was a third model not covered by any of the articles. Its architecture was the same as the one using CIoU loss, but it was trained using SmoothL1Loss.
+
+---
 
 ## The justification
 

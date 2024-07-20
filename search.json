@@ -6,7 +6,7 @@ layout: none
   {
     "title": "{{ post.title | escape }}",
     "url": "{{ post.url | relative_url }}",
-    "categories": "{{ post.categories | join: ',' }}"
+    "tags": "{{ post.tags | join: ',' }}"
   }{% if forloop.last %}{% else %},{% endif %}
   {% endfor %}
 ]

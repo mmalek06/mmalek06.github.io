@@ -3,8 +3,8 @@ layout: default
 title: Search
 ---
 
-<h1>Search by Categories</h1>
-<input type="text" id="search-box" placeholder="Search categories">
+<h1>Search by Tags</h1>
+<input type="text" id="search-box" placeholder="Search tags">
 <ul id="results"></ul>
 
 <script>
@@ -18,7 +18,7 @@ title: Search
         searchBox.addEventListener("input", function() {
           const query = searchBox.value.toLowerCase();
           const filteredPosts = data.filter(post =>
-            post.categories.toLowerCase().includes(query)
+            post.tags.toLowerCase().includes(query)
           );
 
           resultsContainer.innerHTML = '';
