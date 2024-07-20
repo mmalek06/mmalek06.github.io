@@ -1,6 +1,6 @@
 # Bounding box detection for HAM10000 dataset with bigger model and CIoU loss function
 
-This time I'll go straight into the code, because the most of this notebook has already been covered in [previous post](https://mmalek06.github.io/2024/07/13/bounding-box-detection.html).
+There are many loss functions commonly used in the object detection space of AI. SmoothL1Loss is the simplest one. Beyond that, there is a gradient of the *IoU family. In this variation of my simple model, I decided to use the CIoU loss function, as it is regarded as the best one in the family.
 
 ## The code
 
@@ -186,4 +186,4 @@ That's a long sentence with many details, so let's see the next equations.
     - Balanced Loss Components: Prevents any single component of the loss from dominating, leading to a more balanced and effective optimization process.
     - Consistent Gradients: Facilitates stable and consistent gradient updates, improving the convergence and performance of the model.<br />
 
-5. Arctan function takes values from $$\frac{\pi}{2}$$ to $$-\frac{\pi}{2}$$. The maximum difference between two arctan values is $$\pi$$. Then if you multiply out the $$\frac{4}{\pi^2}$$ by $$\pi^2$$ (which is the max result that can be obtained in the brackets) you'll get number 4.
+5. The parameters $$w$$, $$h$$, $$w^g$$, and $$h^g$$ represent the width and height of the predicted bounding box, and the width and height of the ground truth bounding box, respectively. By dividing widths by heights, an aspect ratio is obtained. This aspect ratio needs to be constrained to an interval to prevent it from dominating the entire equation. This is where the arctan function comes in. ![arctan](../images/arctan.png) The arctan function outputs values from $$\frac{\pi}{2}$$ to $$-\frac{\pi}{2}$$. The maximum difference between two arctan values is $$\pi$$. Multiplying $$\frac{4}{\pi^2}$$ by $$\pi^2$$ (the maximum result that can be obtained within the brackets) yields the number 4. If you're wondering why this particular number is used, I must admit that I don't know. I couldn't find any explanation on the internet for the choice of 4 instead of, say, 1. My best guess is that since this constrains the equation result to the interval $$[0, 4)$$ , it allows the aspect ratio term to be weighted as more important (4 times more important) than the previous term.
