@@ -158,6 +158,8 @@ class CIoULoss(nn.Module):
 
 ```
 
+The `CIoULoss` is just a handy wrapper for the function calls, nothing magical here. However, the last line is worth noting. The `loss.mean()` call turns the losses tensor into a scalar value (the loss variable is a tensor of the losses of all the bounding boxes for the given batch). I could have used the `loss.sum()` reduction, so why didn't I? It's quite simple if you think about it for a while. If the batch size changes, the mean calculation will always return numbers on a similar scale, while the sum calculation will be strongly tied to it - bigger batch size equals a bigger number. While experimenting to find the right batch size, it's easier to compare similarly scaled loss values. Additionally, when summing, larger batches produce larger gradients, which means the training may become unstable.
+
 Although I try to avoid including too much math in my ML/AI efforts, sometimes it's unavoidable. Seeing the above blob of code in 3 months, I might not remember what it does, so this mathematical formulation can be helpful:
 
 <div>
