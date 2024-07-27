@@ -74,7 +74,7 @@ This function combines two widely known loss functions: MAE and MSE. It was used
 
 ### CIoU loss
 
-The motivation for creating this loss function is that it is more specific to the problem at hand. First, the code:
+The motivation for creating this loss function is that it is more specific to the problem at hand. I could have used the one that's implemented in the `torchvision.ops` module but when learning something new and complex I usually try to implement it myself. First, the code:
 
 ```python
 import torch
