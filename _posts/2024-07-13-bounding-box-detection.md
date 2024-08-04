@@ -19,7 +19,7 @@ In my opinion, tasks like bounding box detection and image segmentation are amon
 
 ## The code
 
-## Loading the data
+### Loading the data
 
 I'm not sharing all of the code I used to build the train/valid/test images folder or the annotation files because this post would become infinitely long. Once I'm done with torturing the HAM10000 dataset with bounding boxes, I'll share a link to the repository containing the whole solution.
 
