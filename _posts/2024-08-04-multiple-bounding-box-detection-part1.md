@@ -20,7 +20,7 @@ Some of the segmentation masks provided along with the dataset are of bad qualit
 
 <br />
 <img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/cracktree.jpg" /><br />
-<img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/rissbilder" /><br />
+<img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/rissbilder.jpg" /><br />
 
 If you look closely at the first image, you'll notice it consists of clusters of white pixels, often not connected to each other. This means that if I were to use this mask directly, it would detect tens of separate bounding boxes. The other example presents a different issue. It's hard to describe exactly what's visible - there are some strange artifacts surrounding the actual correct masks, which will also need to be addressed.
 
