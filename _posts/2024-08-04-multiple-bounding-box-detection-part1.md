@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "Multiple bounding box detection, Part 1"
-date: 2024-07-05 00:00:00 -0000
+date: 2024-08-04 00:00:00 -0000
 categories: Python
 tags: ["python", "jupyter notebooks", "opencv", "flood fill"]
 ---
