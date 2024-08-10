@@ -138,11 +138,11 @@ print(f"Max model accuracy is: {max_tuple[2]}, checkpoint path: {max_tuple[0]}")
 Using this code revealed that the best hyperparameter combination includes `1024` units in the linear layers of the classifier and `64` and `128` out_channels for the two `Conv2d` layers. I also like to inspect the network activations to visually confirm that the kernels found are actually guiding the network in the desired direction.
 
 <img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/filters_level1_1.png" /><br />
-<img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/filters_level1_2.png" /><br />
+<img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/filters_level1_2.png" />
 
 Some activations are good and make the crack stand out more, while others make it slightly less visible. Let's take a look at the activations from the second `Conv2d` layer:
 
-<img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/filters_level2_1.png" /><br />
+<img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/filters_level2_1.png" />
 
 Visual inspection reveals that more of the second layer's filters "made sense" - more of them made the crack stand out, which can be considered evidence that this architecture managed to converge for good reasons.
 
