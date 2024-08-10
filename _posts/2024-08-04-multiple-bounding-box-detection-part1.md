@@ -1,22 +1,22 @@
 ---
 layout: post
-title: "Multiple bounding box detection, Part 1"
+title: "Multiple bounding box detection, Part 1 - data preparation"
 date: 2024-08-04 00:00:00 -0000
 categories: Python
 tags: ["python", "jupyter notebooks", "opencv", "flood fill"]
 ---
 
-# Multiple bounding box detection, Part 1
+# Multiple bounding box detection, Part 1 - data preparation
 
 This post is the first in a series that I've long planned to write. At the time of writing, I don't know how many parts there will be or their specific topics, but what I can be sure of is that I will attempt to implement major components of R-CNN, Fast(er) R-CNN, and Mask R-CNN.
 
-The initial idea was to train my networks using [this kaggle dataset](https://www.kaggle.com/datasets/lakshaymiddha/crack-segmentation-dataset), and then test them on [something else](https://www.kaggle.com/datasets/dataclusterlabs/cracked-screen-dataset) and then test them on another one. However, given how different the other dataset is, I may instead train on a subset of the first one and test on the remaining portion. We'll see how it goes :)
+The initial idea was to train my networks using [this kaggle dataset](https://www.kaggle.com/datasets/lakshaymiddha/crack-segmentation-dataset), and then test them on [something else](https://www.kaggle.com/datasets/dataclusterlabs/cracked-screen-dataset). However, given how different the other dataset is, I may instead train on a subset of the first one and test on the remaining portion. We'll see how it goes :)
 
 This part will focus on performing some data engineering steps to prepare the data.
 
 ## Requirements
 
-Some of the segmentation masks provided along with the dataset are of bad quality. Take a look at two examples of such images:
+The goal here is to prepare a list of bounding boxes for the neural networks to train on. The kaggle dataset contains segmentation masks, but it doesn't contain bounding box coordinates, so the requirement is to calculate those from the segmentation masks. The thing is, some of them are of bad quality. Take a look at two examples of such images:
 
 <br />
 <img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/cracktree.jpg" /><br />
