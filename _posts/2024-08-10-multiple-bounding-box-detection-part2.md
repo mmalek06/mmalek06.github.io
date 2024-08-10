@@ -1,9 +1,9 @@
 ---
 layout: post
 title: "Multiple bounding box detection, Part 2 - searching for a backbone network"
-date: 2024-08-04 00:00:00 -0000
+date: 2024-08-10 00:00:00 -0000
 categories: Python
-tags: ["python", "image vision", "opencv", "flood fill"]
+tags: ["python", "pytorch", "transfer learning", "image vision"]
 ---
 
 # Multiple bounding box detection, Part 2 - searching for a backbone network for R-CNN architecture
@@ -135,4 +135,62 @@ max_tuple = max(model_results, key=lambda x: x[2])
 print(f"Max model accuracy is: {max_tuple[2]}, checkpoint path: {max_tuple[0]}")
 ```
 
-Using this code revealed that the best hyperparameter combination is `1024` in the linear layers of the classifier, and 64 + 128 `out_channels` for the two `Conv2d` layers.
+Using this code revealed that the best hyperparameter combination includes `1024` units in the linear layers of the classifier and `64` and `128` out_channels for the two `Conv2d` layers. I also like to inspect the network activations to visually confirm that the kernels found are actually guiding the network in the desired direction.
+
+<img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/filters_level1_1.png" /><br />
+<img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/filters_level1_2.png" /><br />
+
+Some activations are good and make the crack stand out more, while others make it slightly less visible. Let's take a look at the activations from the second `Conv2d` layer:
+
+<img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/filters_level2_1.png" /><br />
+
+Visual inspection reveals that more of the second layer's filters "made sense" - more of them made the crack stand out, which can be considered evidence that this architecture managed to converge for good reasons.
+
+For the pretrained network, I decided to go with the `resnext50_32x4d` model from `torchvision.models`. I chose this model because it was one of the newer options available in the package. The architecture definition changed slightly:
+
+```python
+import torch
+import torch.nn as nn
+import torchvision.models as models
+
+from torchvision.models import ResNeXt50_32X4D_Weights
+
+
+class Resnext50FeatureExtractor(nn.Module):
+    def __init__(
+            self,
+            input_shape: tuple[int, int, int] = (3, 224, 224),
+            linear_layers_features: int = 512
+    ):
+        super().__init__()
+
+        self.feature_extractor = models.resnext50_32x4d(weights=ResNeXt50_32X4D_Weights.IMAGENET1K_V1)
+        self.classifier = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(self._get_feature_size(input_shape), linear_layers_features),
+            nn.ReLU(inplace=True),
+            nn.Linear(linear_layers_features, linear_layers_features),
+            nn.ReLU(inplace=True),
+            nn.Linear(linear_layers_features, 1)
+        )
+
+    def _get_feature_size(self, shape):
+        with torch.no_grad():
+            dummy_input = torch.zeros(1, *shape)
+            features = self.feature_extractor(dummy_input)
+
+            return features.numel()
+
+    def forward(self, x):
+        x = self.feature_extractor(x)
+        x = self.classifier(x)
+
+        return x
+```
+
+You may notice that I'm not freezing the `feature_extractor` weights, which is a common practice when using transfer learning. I chose not to do this because I noticed a slight accuracy improvement when allowing the weights to be trained. The model stopped improving after 7 epochs, and the final result was nearly perfect—a validation accuracy of `99.94%` with a validation loss of `0.0001`.
+
+
+## Summary and next steps
+
+It's clear that the pretrained architecture outperformed the custom one, so that's the one I'll use as the backbone network in the next article. However, it's important to consider that this might not always be the default approach for every problem. In the case of a smaller problem, it might be better to use a small, custom architecture, even if it's slightly less accurate. The reason is that a smaller network could offer faster inference times, which could be a significant advantage if inference speed is a critical factor.
