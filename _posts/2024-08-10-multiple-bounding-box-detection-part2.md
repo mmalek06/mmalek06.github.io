@@ -144,7 +144,7 @@ Some activations are good and make the crack stand out more, while others make i
 
 <img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/filters_level2_1.png" />
 
-Visual inspection reveals that more of the second layer's filters "made sense" - more of them made the crack stand out, which can be considered evidence that this architecture managed to converge for good reasons.
+Visual inspection reveals that more of the second layer's filters "made sense" - more of them made the crack stand out, which can be considered evidence that this architecture managed to converge for good reasons. As for the achieved accuracy, it was equal to `96.4%`. For me it was surprisingly good for such a small model and the complexity of the problem at hand. Or maybe I was mistaken, and the problem is not so hard :)
 
 For the pretrained network, I decided to go with the `resnext50_32x4d` model from `torchvision.models`. I chose this model because it was one of the newer options available in the package. The architecture definition changed slightly:
 
