@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "Multiple bounding box detection, Part 2 - searching for a backbone network"
-date: 2024-08-30 00:00:00 -0000
+date: 2024-08-29 00:00:00 -0000
 categories: Python
 tags: ["python", "pytorch", "transfer learning", "image vision"]
 ---
@@ -12,12 +12,12 @@ One of the key components in the R-CNN architecture is the so-called "backbone n
 
 In this article, I'll explore two approaches:
 
-1. Training a small, custom-made neural network to serve as a baseline. If it performs well, it can be included as the actual backbone network.
+1. Training a small, custom-made neural network to serve as a baseline. I don't expect it to be a part of the final solution, but out of sheer curiosity I'd like to see how it does in the context of this problem when compared for something better.
 2. Using a pretrained `resnext50_32x4d` model from `torchvision.models`.
 
 ## Requirements
 
-The single requirement is to see which one of the two networks performs better.
+The single requirement is to see which one of the two networks performs better. The original paper mentioned using a NN trained on a dataset different than the one used for testing the full R-CNN idea implementation, so I'll do the same.
 
 ## The code
 
@@ -188,7 +188,7 @@ class Resnext50FeatureExtractor(nn.Module):
         return x
 ```
 
-You may notice that I'm not freezing the `feature_extractor` weights, which is a common practice when using transfer learning. I chose not to do this because I noticed a slight accuracy improvement when allowing the weights to be trained. The model stopped improving after 7 epochs, and the final result was nearly perfect—a validation accuracy of `99.94%` with a validation loss of `0.0001`.
+You may notice that I'm not freezing the `feature_extractor` weights, which is a common practice when using transfer learning. I chose not to do this because I noticed a slight accuracy improvement when allowing the weights to be trained. The model stopped improving after 7 epochs, and the final result was nearly perfect - a validation accuracy of `99.94%` with a validation loss of `0.0001`.
 
 
 ## Summary and next steps
