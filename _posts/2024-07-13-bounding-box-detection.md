@@ -8,6 +8,9 @@ tags: ["computer vision", "pytorch", "python", "ai"]
 
 # Bounding box detection for HAM10000 dataset
 
+2. [Bounding box detection using CIoU loss](https://mmalek06.github.io/computervision/2024/07/13/bounding-box-detection-with-bigger-model-and-ciou.html)
+3. [Comparing models using SmoothL1Loss and CIoU loss functions](https://mmalek06.github.io/computervision/2024/07/19/comparing-models-using-smoothl1loss-and-ciou-loss-functions.html)
+
 In my opinion, tasks like bounding box detection and image segmentation are among the most satisfying applications of computer vision. A model that can accurately pinpoint an interesting item in an image seems even more magical to me than one that performs classification across millions of classes. In this post, I'll describe the first part of a project aimed at creating a bounding box detection model based on the HAM10000 dataset.
 
 ---
