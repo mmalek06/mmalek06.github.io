@@ -23,7 +23,7 @@ I figured that even if a network using my custom region proposal algorithm turns
 
 I didn't jump straight into the R-CNN implementation - although I initially did, and it turned out to be a mistake. R-CNN trains two modules in parallel: a bounding box regressor and a classifier. The losses from both modules are combined, and the loss information is then backpropagated. Using this approach, I wasn't able to make much progress - neither the classifier nor the regressor was being trained properly. So, I decided to create a separate classifier and run it over a set of region proposals to gain more insight into what was happening. 
 
-The first piece of code I created was this dataset:
+The first piece of code I created was this dataset (I removed some methods from the snippet, because they are so simple and lengthy, I just didn't want to describe them anyway):
 
 ```python
 class CrackDatasetForClassificationWithProposals(Dataset):
@@ -70,59 +70,11 @@ class CrackDatasetForClassificationWithProposals(Dataset):
         labels = (ious.max(dim=1)[0] > 0.01).float()
 
         return image, proposals, labels
-
-    @staticmethod
-    def _group_annotations_by_image(annotations: list[dict]) -> dict[int, list[dict]]:
-        grouped_annotations = {}
-
-        for annotation in annotations:
-            image_id = annotation["image_id"]
-
-            if image_id not in grouped_annotations:
-                grouped_annotations[image_id] = []
-
-            grouped_annotations[image_id].append(annotation)
-
-        return grouped_annotations
-
-    @staticmethod
-    def _parse_annotations(annotations: list[dict]) -> np.ndarray:
-        """
-        Returns:
-        - bboxes: A list of bounding boxes in the format [x_min, y_min, x_max, y_max].
-        """
-        bboxes = []
-
-        for annotation in annotations:
-            bbox = annotation.get("bbox", [])
-
-            if not bbox or len(bbox) != 4:
-                continue
-
-            x_min, y_min, width, height = map(int, bbox)
-
-            if width <= 0 or height <= 0:
-                continue
-
-            x_max, y_max = x_min + width, y_min + height
-
-            bboxes.append([x_min, y_min, x_max, y_max])
-
-        if not bboxes:
-            return np.zeros((0, 4), dtype=np.float32)
-
-        return np.array(bboxes, dtype=np.float32)
-
-    @staticmethod
-    def _load_image(image_path: str) -> np.ndarray:
-        image = cv2.imread(image_path, cv2.IMREAD_COLOR)
-
-        return image
 ```
 
 Most of the action happens inside the `__getitem__` method. First, an image is loaded from disk, then it's transformed using the transforms composed in the `__init__` method earlier, and finally, the image is passed into the selective search algorithm. The last lines of the method are responsible for creating a tensor of labels - if there's any intersection between a ground truth bounding box and a region proposed by the selective search (SS) algorithm, the label will be set to 1, and 0 otherwise.
 
-This code snippet compares the `ious` tensor to a fairly small threshold of `0.01`, which is something I plan to tune later. The repository will contain the final value for this parameter.
+This code snippet compares the `ious` (and IoU calculation is the same as used [here](https://mmalek06.github.io/computervision/2024/07/13/bounding-box-detection-with-bigger-model-and-ciou.html) - it's the bounding boxes overlap divided by the union so the sum of their areas) tensor to a fairly small threshold of `0.01`, which is something I plan to tune later. The repository will contain the final value for this parameter.
 
 As for the SS algorithm, I wrapped it in a helper function designed to limit the number of proposals. The programmer has no control over how many proposals will be produced by default, but to speed up training, this number can be adjusted after running the OpenCV code (since the SS algorithm can generate thousands of proposals for some images).
 
@@ -160,4 +112,59 @@ def perform_selective_search(image: np.ndarray, image_path: str, batch_size: int
         return torch.tensor(top_proposals, dtype=torch.float32)
 ```
 
-Although this function doesn't return batched results, the `SELECTIVE_SEARCH_BATCH_SIZE` will also be used later in the training loop.
+Although this function doesn't return batched results, the `SELECTIVE_SEARCH_BATCH_SIZE` will also be used later in the training loop. Apart from that the `if` statement at the beginning is something very important. Since the Python implementation of the selective search (SS) algorithm runs on the CPU, it can be quite slow, and because it's part of the training loop, the overall training time is significantly impacted during the first epoch. However, since the SS results are cached by image path, subsequent epochs run much faster - resulting in more than a 2x speedup thanks to the caching. As for the rest of the function - it's tailored to the dataset and since the cracks are big, the code is sorting the SS proposals by their area, descending, and return `2 * batch_size` of them.
+
+The next piece of code are two functions that are used in the training and validation loops:
+
+```python
+def chunkify(x: Iterable | Sized) -> Iterable[Iterable]:
+    for i in range(0, len(x), SELECTIVE_SEARCH_BATCH_SIZE):
+        yield x[i:i + SELECTIVE_SEARCH_BATCH_SIZE]
+
+
+def process_and_calculate_loss(
+        image: torch.Tensor, 
+        proposals: torch.Tensor, 
+        labels: Iterable[int]
+) -> tuple[torch.Tensor, int, int]:
+    cropped_proposals_with_labels = []
+
+    for idx, proposal in enumerate(proposals):
+        label = labels[idx]
+        x_min, y_min, x_max, y_max = proposal.int()
+        cropped_region = image[:, y_min:y_max, x_min:x_max]
+        resized_region = resize(cropped_region, [224, 224]) # stretch the proposal so that it matches the NN expected input shape
+
+        cropped_proposals_with_labels.append((label, resized_region))
+
+    batch_loss = 0.0
+    correct = 0
+    total = 0
+
+    for chunk in chunkify(cropped_proposals_with_labels):
+        labels_batch, proposals_batch = zip(*chunk)
+        labels_batch = torch.stack(labels_batch).to(device)
+        regions = torch.stack(proposals_batch).to(device)
+        predictions = model(regions).squeeze(1)
+        loss = criterion(predictions, labels_batch)
+        batch_loss += loss.item()
+
+        if model.training:
+            loss.backward()
+
+        predicted = (predictions > 0.5).float()
+        correct += (predicted == labels_batch).sum().item()
+        total += labels_batch.numel()
+
+    return batch_loss, correct, total
+```
+
+The above is part of a larger training loop. You might notice that I'm backpropagating the loss after each model run. I could have pushed this to the outer training loop and returned aggregated results from the function, but for some reason, that approach caused a huge spike in memory utilization on my PC. I even moved all the data (except `regions`, which go into the model) to the `CPU` device, but that didn't help. The `GPU shared memory` kept getting drained over and over again, so the current approach is the only viable option.
+
+There's no harm in doing it this way—the loss is simply backpropagated fragment by fragment, rather than in a single large chunk.
+
+I'll skip the wrapping training loop and go straight into testing to see which bounding boxes are considered as containing cracks and which are not:
+
+```python
+
+```
