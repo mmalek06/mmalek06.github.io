@@ -156,7 +156,7 @@ import torchvision.models as models
 from torchvision.models import ResNeXt50_32X4D_Weights
 
 
-class Resnext50FeatureExtractor(nn.Module):
+class Resnext50BasedClassifier(nn.Module):
     def __init__(
             self,
             input_shape: tuple[int, int, int] = (3, 224, 224),
@@ -164,7 +164,7 @@ class Resnext50FeatureExtractor(nn.Module):
     ):
         super().__init__()
 
-        self.feature_extractor = models.resnext50_32x4d(weights=ResNeXt50_32X4D_Weights.IMAGENET1K_V1)
+        self.feature_extractor = models.resnext50_32x4d(weights=ResNeXt50_32X4D_Weights.DEFAULT)
         self.classifier = nn.Sequential(
             nn.Flatten(),
             nn.Linear(self._get_feature_size(input_shape), linear_layers_features),
