@@ -12,7 +12,7 @@ The original R-CNN paper mentions using the selective search algorithm for findi
 
 I won't go into the technical details of how it works, as it would take us off-topic. However, while reading about it, I became curious whether I could create something similar—not as advanced, but using similar mechanisms. For example, after closely examining the dataset, I noticed that most of the cracks could be described by color; they were either brighter or darker than the rest of the image and were also larger than other similarly colored elements.
 
-I figured that even if a network using my custom region proposal algorithm turns out to be less efficient than one using canonical selective search, I would still have fun and gain knowledge in the process. I’ll describe this custom algorithm in the next blog post.
+I figured that even if a network using my custom region proposal algorithm turns out to be less efficient than one using canonical selective search, I would still have fun and gain knowledge in the process. I'll describe this custom algorithm in the next blog post.
 
 ## Requirements
 
@@ -85,6 +85,8 @@ SELECTIVE_SEARCH_BATCH_SIZE = 70
 
 def perform_selective_search(image: np.ndarray, image_path: str, batch_size: int = SELECTIVE_SEARCH_BATCH_SIZE) -> torch.Tensor:
     if image_path in proposal_cache:
+        random.shuffle(proposal_cache[image_path])
+        
         return torch.tensor(proposal_cache[image_path], dtype=torch.float32)
     else:
         ss = cv2.ximgproc.segmentation.createSelectiveSearchSegmentation()
@@ -112,7 +114,17 @@ def perform_selective_search(image: np.ndarray, image_path: str, batch_size: int
         return torch.tensor(top_proposals, dtype=torch.float32)
 ```
 
-Although this function doesn't return batched results, the `SELECTIVE_SEARCH_BATCH_SIZE` will also be used later in the training loop. Apart from that the `if` statement at the beginning is something very important. Since the Python implementation of the selective search (SS) algorithm runs on the CPU, it can be quite slow, and because it's part of the training loop, the overall training time is significantly impacted during the first epoch. However, since the SS results are cached by image path, subsequent epochs run much faster - resulting in more than a 2x speedup thanks to the caching. As for the rest of the function - it's tailored to the dataset and since the cracks are big, the code is sorting the SS proposals by their area, descending, and return `2 * batch_size` of them.
+Although this function doesn't return batched results, the `SELECTIVE_SEARCH_BATCH_SIZE` will also be used later in the training loop. Apart from that the `if` statement at the beginning is something very important. Since the Python implementation of the selective search (SS) algorithm runs on the CPU, it can be quite slow, and because it's part of the training loop, the overall training time is significantly impacted during the first epoch. However, since the SS results are cached by image path, subsequent epochs run much faster. 
+
+This is the difference between first two epochs when the weights of the `feature_extractor` are not frozen:
+
+<img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/caching_proof1.png" />
+
+And this is the difference between them when the weights are frozen:
+
+<img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/caching_proof2.png" /><br />
+
+As for the rest of the function - it's tailored to the dataset and since the cracks are big, the code is sorting the SS proposals by their area, descending, and return `2 * batch_size` of them.
 
 The next piece of code are two functions that are used in the training and validation loops:
 
