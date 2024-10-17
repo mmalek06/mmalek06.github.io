@@ -10,18 +10,25 @@ tags: ["python", "pytorch", "transfer learning", "image vision", "selective sear
 
 The original R-CNN paper mentions using the selective search algorithm for finding regions of interest to be fed into the network. At the time of R-CNN's inception, one common approach was to use sliding windows, but this came with several challenges. For instance, how much should the sliding window move? Should the movement be the same along both axes? How can we ensure that windows capture relevant visual information, like shape, color, or light changes? All of these issues were addressed by the selective search algorithm, which is available in the `open-cv` library.
 
-I won't go into the technical details of how it works, as it would take us off-topic. However, while reading about it, I became curious whether I could create something similar—not as advanced, but using similar mechanisms. For example, after closely examining the dataset, I noticed that most of the cracks could be described by color; they were either brighter or darker than the rest of the image and were also larger than other similarly colored elements.
+I won't go into the technical details of how it works, as it would take us off-topic. However, while reading about it, I became curious whether I could create something similar - not as advanced, but using similar mechanisms. For example, after closely examining the dataset, I noticed that most of the cracks could be described by color; they were either brighter or darker than the rest of the image and were also larger than other similarly colored elements.
 
 I figured that even if a network using my custom region proposal algorithm turns out to be less efficient than one using canonical selective search, I would still have fun and gain knowledge in the process. I'll describe this custom algorithm in the next blog post.
 
+## The justification
+
+If I knew AI and computer vision techniques better, I would have probably jumped straight into building an R-CNN network. In fact, that's what I initially did, but it turned out to be a frustrating mistake. I didn’t get any good results, so I decided to take a step back and approach things incrementally.
+
+I started by focusing on finding the right combination of IoU threshold and proposal set size. I measured the "goodness of fit" of these parameters by observing how the model's accuracy changed. The idea was that if the classifier performed better for a given combination, then the bounding box regressor would also be able to learn more effectively.
+
 ## Requirements
 
-1. Build a classifier NN utilizing the canonical selective search algorithm.
-2. Check if there's a need to use all of the selective search (SS) results, or should they be capped - what impact on the accuracy would it have?
+1. Find the best proposal set size / IoU threshold combination - this one is to optimize time VS accuracy ratio - I'm not attempting to reach over 90% accuracy, I just want the end effect to be able to pinpoint most cracks.
+2. Build a dataset class to be reused with the actual R-CNN network (possibly with minimal changes).
+3. Experiment with frozen/unfrozen `feature_extractor` module to see how the accuracy changes.
 
 ## The code
 
-I didn't jump straight into the R-CNN implementation - although I initially did, and it turned out to be a mistake. R-CNN trains two modules in parallel: a bounding box regressor and a classifier. The losses from both modules are combined, and the loss information is then backpropagated. Using this approach, I wasn't able to make much progress - neither the classifier nor the regressor was being trained properly. So, I decided to create a separate classifier and run it over a set of region proposals to gain more insight into what was happening. 
+R-CNN trains two modules in parallel: a bounding box regressor and a classifier. The losses from both modules are combined, and the loss information is then backpropagated. Using this approach, I wasn't able to make much progress - neither the classifier nor the regressor was being trained properly and I couldn't tell if that because I made a mistake architecting the network itself, or was it because of the SS algorithm, or something else. So, I decided to create a separate classifier and run it over a set of region proposals to gain more insight into what was happening. 
 
 The first piece of code I created was this dataset (I removed some methods from the snippet, because they are so simple and lengthy, I just didn't want to describe them anyway):
 
@@ -114,7 +121,7 @@ def perform_selective_search(image: np.ndarray, image_path: str, batch_size: int
         return torch.tensor(top_proposals, dtype=torch.float32)
 ```
 
-Although this function doesn't return batched results, the `SELECTIVE_SEARCH_BATCH_SIZE` will also be used later in the training loop. Apart from that the `if` statement at the beginning is something very important. Since the Python implementation of the selective search (SS) algorithm runs on the CPU, it can be quite slow, and because it's part of the training loop, the overall training time is significantly impacted during the first epoch. However, since the SS results are cached by image path, subsequent epochs run much faster. 
+Although this function doesn't return batched results, the `SELECTIVE_SEARCH_BATCH_SIZE` will also be used later in the training loop. That constant is also something that I tuned while working with this part of the project. Apart from that the `if` statement at the beginning is something very important. Since the Python implementation of the selective search (SS) algorithm runs on the CPU, it can be quite slow, and because it's part of the training loop, the overall training time is significantly impacted during the first epoch. However, since the SS results are cached by image path, subsequent epochs run much faster. 
 
 This is the difference between first two epochs when the weights of the `feature_extractor` are not frozen:
 
