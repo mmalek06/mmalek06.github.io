@@ -163,7 +163,7 @@ resource "azurerm_linux_virtual_machine" "vm" {
   resource_group_name             = azurerm_resource_group.rg.name
   network_interface_ids           = [azurerm_network_interface.nic.id]
   size                            = "Standard_NV6ads_A10_v5"
-  admin_username                  = "azureuser"
+  admin_username                  = "xxx"
   admin_password                  = random_password.password.result
   disable_password_authentication = false
   custom_data                     = base64encode(templatefile("custom-data.tpl", {
@@ -233,6 +233,10 @@ echo "c.NotebookApp.open_browser = False" >> /home/azureuser/.jupyter/jupyter_no
 echo "c.NotebookApp.notebook_dir = '/home/azureuser/jupyter_notebooks'" >> /home/azureuser/.jupyter/jupyter_notebook_config.py
 echo "c.NotebookApp.allow_root = True" >> /home/azureuser/.jupyter/jupyter_notebook_config.py
 ```
+
+It looks like a complete solution, but unfortunately, it's not. To be able to RDP into the machine, I had to perform one more manual step - enabling Just-In-Time (JIT) access. This cannot be configured via Terraform and has to be enabled on the following screen:
+
+<img src="https://mmalek06.github.io/images/jit-azure.jpg" />
 
 ## Conclusions
 
