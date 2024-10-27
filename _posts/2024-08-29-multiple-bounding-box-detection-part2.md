@@ -54,7 +54,8 @@ class CustomClassifier(nn.Module):
             nn.ReLU(inplace=True),
             nn.Linear(linear_layers_features, linear_layers_features),
             nn.ReLU(inplace=True),
-            nn.Linear(linear_layers_features, 1)
+            nn.Linear(linear_layers_features, 1),
+            nn.Sigmoid()
         )
 
     def _get_feature_size(self, shape):
@@ -171,7 +172,8 @@ class Resnext50BasedClassifier(nn.Module):
             nn.ReLU(inplace=True),
             nn.Linear(linear_layers_features, linear_layers_features),
             nn.ReLU(inplace=True),
-            nn.Linear(linear_layers_features, 1)
+            nn.Linear(linear_layers_features, 1),
+            nn.Sigmoid()
         )
 
     def _get_feature_size(self, shape):
