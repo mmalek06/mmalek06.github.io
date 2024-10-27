@@ -206,6 +206,8 @@ The VM definition contains two key points of interest: the `identity` block and 
 
 As for the `custom_data` block, it contains a shell script to be run upon VM start. It will install software necessary for my further work (like RDP). It will also mount blob storage volume into the VM using a tool called `blobfuse`.
 
+<b>Side note #3</b>: As for the `source_image_reference` block, I took the value from [here](https://documentation.ubuntu.com/azure/en/latest/azure-how-to/instances/find-ubuntu-images/).
+
 ```shell
 #!/bin/bash
 sudo wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb
