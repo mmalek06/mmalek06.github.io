@@ -236,7 +236,7 @@ echo "c.NotebookApp.allow_root = True" >> /home/azureuser/.jupyter/jupyter_noteb
 
 It looks like a complete solution, but unfortunately, it's not. To be able to RDP into the machine, I had to perform one more manual step - enabling Just-In-Time (JIT) access. This cannot be configured via Terraform and has to be enabled on the following screen:
 
-<img src="https://mmalek06.github.io/images/jit-azure.jpg" />
+<img src="https://mmalek06.github.io/images/jit-azure.png" />
 
 ## Conclusions
 
