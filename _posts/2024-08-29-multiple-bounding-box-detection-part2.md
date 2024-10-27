@@ -72,6 +72,8 @@ class CustomClassifier(nn.Module):
         return x
 ```
 
+<b>Side note:</b> `Linear` layer could have been the last one, but then the loss function would have to be `BCEWithLogitsLoss`, as it uses sigmoid internally. However, then one has to remember about using  sigmoid at prediction time to get values in the `[0, 1]` range.
+
 After defining the architecture, I created the typical training-and-validation loop code, but I won't include it here as it's quite long and self-explanatory. If you're interested, you can see everything [in my repository](https://github.com/mmalek06/crack-detection/blob/main/0.3_custom_classifier.ipynb).
 
 Since this architecture is small and trains quickly, I decided to use four sets of hyperparameters to search for the best combination. Additionally, to save time if I want to run the notebook multiple times, I implemented a checkpoint system. If a checkpoint file is present for a given hyperparameter combination, it will be loaded and used instead of rerunning the training.
