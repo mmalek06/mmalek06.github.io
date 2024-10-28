@@ -166,9 +166,11 @@ resource "azurerm_linux_virtual_machine" "vm" {
   admin_username                  = "xxx"
   admin_password                  = random_password.password.result
   disable_password_authentication = false
-  custom_data                     = base64encode(templatefile("custom-data.tpl", {
-    account_name   = azurerm_storage_account.storage_account.name
-    container_name = azurerm_storage_container.blob_container.name
+    custom_data = base64encode(templatefile("custom-data.tpl", {
+    account_name        = azurerm_storage_account.storage_account.name
+    container_name      = azurerm_storage_container.blob_container.name
+    storage_account_key = azurerm_storage_account.storage_account.primary_access_key
+    user_name           = "xxx"
   }))
 
   os_disk {
@@ -204,34 +206,70 @@ Starting from the top: the network interface is necessary for the VM to communic
 
 The VM definition contains two key points of interest: the `identity` block and the `custom_data` block. The `SystemAssigned` identity means that the VM can securely access other Azure resources, like blob storage, without needing explicit credentials. This identity is managed by Azure and will be automatically provisioned and decommissioned as needed, as described [in this tutorial](https://chatgpt.com/c/e6b6eb31-eced-4fc4-8a05-e4dde8df2775).
 
-As for the `custom_data` block, it contains a shell script to be run upon VM start. It will install software necessary for my further work (like RDP). It will also mount blob storage volume into the VM using a tool called `blobfuse`.
+As for the `custom_data` block, it contains a shell script to be run upon VM start. It will install software necessary for my further work (like RDP). It will also mount blob storage volume into the VM using a tool called `blobfuse2`.
 
 <b>Side note #3</b>: As for the `source_image_reference` block, I took the value from [here](https://documentation.ubuntu.com/azure/en/latest/azure-how-to/instances/find-ubuntu-images/).
 
 ```shell
 #!/bin/bash
-sudo wget https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb
+sudo wget https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb
 sudo dpkg -i packages-microsoft-prod.deb
-sudo apt-get update
-apt-get update -y
-apt-get install -y ubuntu-desktop xrdp blobfuse python3-pip python3-venv
+sudo apt-get update -y
+sudo apt-get install -y ubuntu-desktop xrdp libfuse3-dev fuse3 blobfuse2 python3-pip python3-venv
+
 systemctl enable xrdp
 systemctl start xrdp
-ssh-keygen -t rsa -b 4096 -f /home/xxx/.ssh/id_rsa -N ""
-mkdir -p /mnt/blob_storage
-mkdir -p /mnt/blob_cache
-echo "accountName=${account_name}" > /etc/blobfuse.cfg
-echo "containerName=${container_name}" >> /etc/blobfuse.cfg
-chmod 600 /etc/blobfuse.cfg
-blobfuse /mnt/blob_storage --tmp-path=/mnt/blob_cache --config-file=/etc/blobfuse.cfg -o attr_timeout=240 -o entry_timeout=240 -o negative_timeout=120
+ssh-keygen -t rsa -b 4096 -f $HOME/.ssh/id_rsa -N ""
+
+sudo mkdir /mnt/resource/blobfuse2tmp -p
+sudo chown ${user_name} /mnt/resource/blobfuse2tmp
+mkdir $HOME/deeplearning
+mkdir $HOME/fusecache
+yaml_file="$HOME/blobfuse_config.yml"
+
+cat <<EOF > "$yaml_file"
+logging:
+  type: syslog
+  level: log_debug
+
+components:
+  - libfuse
+  - file_cache
+  - attr_cache
+  - azstorage
+
+libfuse:
+  attribute-expiration-sec: 120
+  entry-expiration-sec: 120
+  negative-entry-expiration-sec: 240
+
+file_cache:
+  path: $HOME/fusecache
+  timeout-sec: 120
+  max-size-mb: 4096
+
+attr_cache:
+  timeout-sec: 7200
+
+azstorage:
+  type: block
+  account-name: ${account_name}
+  account-key: ${storage_account_key}
+  endpoint: https://${account_name}.blob.core.windows.net
+  mode: key
+  container: ${container_name}
+EOF
+sudo blobfuse2 mount $HOME/deeplearning --config-file="$HOME/blobfuse_config.yml"
+
 pip3 install --upgrade pip
 pip3 install opencv-python-headless matplotlib numpy torch torchvision tqdm jupyter
-mkdir -p /home/xxx/jupyter_notebooks
+mkdir -p $HOME/jupyter_notebooks
+sudo chown -R ${user_name} $HOME/jupyter_notebooks/
 jupyter notebook --generate-config -y
-echo "c.NotebookApp.ip = '0.0.0.0'" >> /home/xxx/.jupyter/jupyter_notebook_config.py
-echo "c.NotebookApp.open_browser = False" >> /home/xxx/.jupyter/jupyter_notebook_config.py
-echo "c.NotebookApp.notebook_dir = '/home/xxx/jupyter_notebooks'" >> /home/xxx/.jupyter/jupyter_notebook_config.py
-echo "c.NotebookApp.allow_root = True" >> /home/xxx/.jupyter/jupyter_notebook_config.py
+echo "c.NotebookApp.ip = '0.0.0.0'" >> $HOME/.jupyter/jupyter_notebook_config.py
+echo "c.NotebookApp.open_browser = False" >> $HOME/.jupyter/jupyter_notebook_config.py
+echo "c.NotebookApp.notebook_dir = '$HOME/jupyter_notebooks'" >> $HOME/.jupyter/jupyter_notebook_config.py
+echo "c.NotebookApp.allow_root = True" >> $HOME/.jupyter/jupyter_notebook_config.py
 ```
 
 It looks like a complete solution, but unfortunately, it's not. To be able to RDP into the machine, I had to perform one more manual step - enabling Just-In-Time (JIT) access. This cannot be configured via Terraform and has to be enabled on the following screen:
