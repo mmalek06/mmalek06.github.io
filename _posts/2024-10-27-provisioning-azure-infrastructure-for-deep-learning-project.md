@@ -217,7 +217,7 @@ apt-get update -y
 apt-get install -y ubuntu-desktop xrdp blobfuse python3-pip python3-venv
 systemctl enable xrdp
 systemctl start xrdp
-ssh-keygen -t rsa -b 4096 -f /home/azureuser/.ssh/id_rsa -N ""
+ssh-keygen -t rsa -b 4096 -f /home/xxx/.ssh/id_rsa -N ""
 mkdir -p /mnt/blob_storage
 mkdir -p /mnt/blob_cache
 echo "accountName=${account_name}" > /etc/blobfuse.cfg
@@ -226,12 +226,12 @@ chmod 600 /etc/blobfuse.cfg
 blobfuse /mnt/blob_storage --tmp-path=/mnt/blob_cache --config-file=/etc/blobfuse.cfg -o attr_timeout=240 -o entry_timeout=240 -o negative_timeout=120
 pip3 install --upgrade pip
 pip3 install opencv-python-headless matplotlib numpy torch torchvision tqdm jupyter
-mkdir -p /home/azureuser/jupyter_notebooks
+mkdir -p /home/xxx/jupyter_notebooks
 jupyter notebook --generate-config -y
-echo "c.NotebookApp.ip = '0.0.0.0'" >> /home/azureuser/.jupyter/jupyter_notebook_config.py
-echo "c.NotebookApp.open_browser = False" >> /home/azureuser/.jupyter/jupyter_notebook_config.py
-echo "c.NotebookApp.notebook_dir = '/home/azureuser/jupyter_notebooks'" >> /home/azureuser/.jupyter/jupyter_notebook_config.py
-echo "c.NotebookApp.allow_root = True" >> /home/azureuser/.jupyter/jupyter_notebook_config.py
+echo "c.NotebookApp.ip = '0.0.0.0'" >> /home/xxx/.jupyter/jupyter_notebook_config.py
+echo "c.NotebookApp.open_browser = False" >> /home/xxx/.jupyter/jupyter_notebook_config.py
+echo "c.NotebookApp.notebook_dir = '/home/xxx/jupyter_notebooks'" >> /home/xxx/.jupyter/jupyter_notebook_config.py
+echo "c.NotebookApp.allow_root = True" >> /home/xxx/.jupyter/jupyter_notebook_config.py
 ```
 
 It looks like a complete solution, but unfortunately, it's not. To be able to RDP into the machine, I had to perform one more manual step - enabling Just-In-Time (JIT) access. This cannot be configured via Terraform and has to be enabled on the following screen:
