@@ -12,7 +12,7 @@ One of the key components in the R-CNN architecture is the so-called "backbone n
 
 In this article, I'll explore two approaches:
 
-1. Training a small, custom-made neural network to serve as a baseline. I don't expect it to be a part of the final solution, but out of sheer curiosity I'd like to see how it does in the context of this problem when compared for something better.
+1. Training a small, custom-made neural network to serve as a baseline. I don't expect it to be a part of the final solution, but out of sheer curiosity I'd like to see how it does in the context of this problem when compared to something better.
 2. Using a pretrained `resnext50_32x4d` model from `torchvision.models`.
 
 ## Requirements
