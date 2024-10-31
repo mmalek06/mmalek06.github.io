@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "Multiple bounding box detection, Part 2 - searching for a backbone network"
-date: 2024-08-29 00:00:00 -0000
+date: 2025-08-29 00:00:00 -0000
 categories: Python
 tags: ["python", "pytorch", "transfer learning", "image vision"]
 ---
