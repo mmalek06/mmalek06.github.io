@@ -134,7 +134,7 @@ def perform_selective_search(image: np.ndarray) -> Iterable[int]:
 
 The R-CNN paper authors mention that in their case they got around 2k proposals per image. However, if you try running this function on the crack dataset I'm using, you'll be lucky if it produces a thousand proposals. It's understandable. Crack images are usually very gray, don't show varying structures like people, cars, or buildings. Below I attach two outputs (I also limited the number of boxes to 100):
 
-<div>
+<div style="height: 360px">
     <img style="width: 360px; float: left" src="https://mmalek06.github.io/images/premade_ss_1.png" />
     <img style="width: 360px; float: right" src="https://mmalek06.github.io/images/premade_ss_2.png" />
 </div>
