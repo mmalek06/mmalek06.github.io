@@ -97,12 +97,12 @@ def find_adaptive_regions(image, min_area=250):
 - `find_adaptive_regions` orchestrates all the operations and returns region proposals.
 
 <div style="height: 390px">
-    <img style="width: 360px; float: left" src="https://mmalek06.github.io/images/custom_ss_1.png" /><br />
-    <img style="width: 360px; float: right" src="https://mmalek06.github.io/images/custom_ss_2.png" /><br />
+    <img style="width: 360px; float: left" src="https://mmalek06.github.io/images/custom_ss_1.png" />
+    <img style="width: 360px; float: right" src="https://mmalek06.github.io/images/custom_ss_2.png" />
 </div>
 <div style="height: 390px">
-    <img style="width: 360px; float: left" src="https://mmalek06.github.io/images/custom_ss_3.png" /><br />
-    <img style="width: 360px; float: right" src="https://mmalek06.github.io/images/custom_ss_4.png" /><br />
+    <img style="width: 360px; float: left" src="https://mmalek06.github.io/images/custom_ss_3.png" />
+    <img style="width: 360px; float: right" src="https://mmalek06.github.io/images/custom_ss_4.png" />
 </div>
 <br />
 It's not half bad, isn't it? The thing is that this outputs small regions for certain images and for some it's not even proposing any regions, where there should be at least a few. SS does much better and obviously it's use is much less involved:
@@ -135,8 +135,8 @@ def perform_selective_search(image: np.ndarray) -> Iterable[int]:
 The R-CNN paper authors mention that in their case they got around 2k proposals per image. However, if you try running this function on the crack dataset I'm using, you'll be lucky if it produces a thousand proposals. It's understandable. Crack images are usually very gray, don't show varying structures like people, cars, or buildings. Below I attach two outputs (I also limited the number of boxes to 100):
 
 <div>
-    <img style="width: 360px; float: left" src="https://mmalek06.github.io/images/premade_ss_1.png" /><br />
-    <img style="width: 360px; float: right" src="https://mmalek06.github.io/images/premade_ss_2.png" /><br />
+    <img style="width: 360px; float: left" src="https://mmalek06.github.io/images/premade_ss_1.png" />
+    <img style="width: 360px; float: right" src="https://mmalek06.github.io/images/premade_ss_2.png" />
 </div>
 <br />
 The last piece of the puzzle is the proposal builder functionality. You'll notice that I'm capping the number of negative proposals saved to disk at 400 - this is for performance reasons. The proposal generation process already takes hours, and if I saved every 20x20px proposal image, it would quickly consume all my disk space. However, because positive proposals are very rare, I'm not limiting those.
