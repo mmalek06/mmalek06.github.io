@@ -105,6 +105,7 @@ def find_adaptive_regions(image, min_area=250):
     <img style="float: left" src="https://mmalek06.github.io/images/custom_ss_3.png" /><br />
     <img style="float: right" src="https://mmalek06.github.io/images/custom_ss_4.png" /><br />
 </div>
+<br />
 
 It's not half bad, isn't it? The thing is that this outputs small regions for certain images and for some it's not even proposing any regions, where there should be at least a few. SS does much better and obviously it's use is much less involved:
 
