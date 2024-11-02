@@ -96,16 +96,14 @@ def find_adaptive_regions(image, min_area=250):
 - `detect_and_filter_components` is essential for isolating and focusing on significant regions within the image while discarding smaller, potentially irrelevant ones. The function uses OpenCV's `cv2.connectedComponentsWithStats` to perform a connected component analysis on the input binary image. This method groups connected pixels into distinct labeled components, effectively identifying each "region" in the image.
 - `find_adaptive_regions` orchestrates all the operations and returns region proposals.
 
-<div>
+<div style="height: 390px">
     <img style="float: left" src="https://mmalek06.github.io/images/custom_ss_1.png" /><br />
     <img style="float: right" src="https://mmalek06.github.io/images/custom_ss_2.png" /><br />
 </div>
-<br />
-<div>
+<div style="height: 390px">
     <img style="float: left" src="https://mmalek06.github.io/images/custom_ss_3.png" /><br />
     <img style="float: right" src="https://mmalek06.github.io/images/custom_ss_4.png" /><br />
 </div>
-<br />
 
 It's not half bad, isn't it? The thing is that this outputs small regions for certain images and for some it's not even proposing any regions, where there should be at least a few. SS does much better and obviously it's use is much less involved:
 
