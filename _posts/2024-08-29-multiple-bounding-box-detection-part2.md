@@ -8,7 +8,7 @@ tags: ["python", "pytorch", "transfer learning", "image vision", "selective sear
 
 # Multiple bounding box detection, Part 2 - preparing region proposals for fine tuning phase
 
-The second part of the title may be a bit surprising to some. Didn't we just prepare the data in [this post](https://mmalek06.github.io/python/2024/08/04/multiple-bounding-box-detection-part1.html)? The thing is, that was only phase one. But where's the initial training phase, you may ask? Well, the authors of the [original R-CNN paper](https://arxiv.org/pdf/1311.2524v5) mention pretraining a CNN on an auxiliary dataset (ILSVRC2012—this is noted on page 3 of the linked PDF). However, [this youtube video](https://youtu.be/5DvljLV4S1E?t=831) says that they only fine-tuned a pretrained AlexNet.
+The second part of the title may be a bit surprising to some. Didn't we just prepare the data in [this post](https://mmalek06.github.io/python/2024/08/04/multiple-bounding-box-detection-part1.html)? The thing is, that was only phase one. But where's the initial training phase, you may ask? Well, the authors of the [original R-CNN paper](https://arxiv.org/pdf/1311.2524v5) mention pretraining a CNN on an auxiliary dataset (ILSVRC2012 - this is noted on page 3 of the linked PDF). However, [this youtube video](https://youtu.be/5DvljLV4S1E?t=831) says that they only fine-tuned a pretrained AlexNet.
 
 For my work, it doesn’t make much difference. I don't have enough time to train a feature extractor from scratch, so I'll use a good, pretrained CNN and fine-tune its weights. Additionally, I plan to see if I can optimize the chosen CNN for this specific task. In AI lore, the layers closer to the network output detect more general features, like noses, eyes, or doors - large, recognizable elements. For this task, however, this may not be necessary since it's theoretically simple: there's only one class, and the entities are essentially lines and curves.
 
@@ -22,7 +22,7 @@ For my work, it doesn’t make much difference. I don't have enough time to trai
 
 Fortunately, there's no need to implement selective search (SS) from scratch, as the god-like authors of the OpenCV library have already done it for us. I experimented with implementing parts of what I understood from the selective search description for fun and even achieved some surprisingly good results. However, my attempts didn't come close to the quality of the ready-made algorithm.
 
-<b>Side note</b>: for those interested, my custom algorithm focused mainly on detecting color differences—one of the key aspects of SS. I'll attach it here for completeness.
+<b>Side note</b>: for those interested, my custom algorithm focused mainly on detecting color differences - one of the key aspects of SS. I'll attach it here for completeness.
 
 ```python
 def calculate_average_brightness(image):
@@ -194,15 +194,15 @@ class ProposalBuilder:
                 dtype=torch.float32
             )
 
-            if not torch.any(sorted_proposals) or ground_truth_boxes.numel() == 0:
+            if sorted_proposals.size(0) == 0 or ground_truth_boxes.size(0) == 0:
                 continue
-            
+
             ious = torchvision.ops.box_iou(sorted_proposals, ground_truth_boxes)
             labels = (ious.max(dim=1)[0] > 0.5).float()
             original_filename, file_extension = row["file_name"].split(".")
     
             for counter, (proposal, iou, label) in enumerate(zip(sorted_proposals, ious, labels)):
-                if total_count < 5996384:
+                if total_count < 3000000:
                     total_count += 1
                     
                     continue
