@@ -1,12 +1,12 @@
 ---
 layout: post
-title: "Multiple bounding box detection, Part 2 - searching for a backbone network"
+title: "Multiple bounding box detection, Part 2 - preparing region proposals for the fine tuning phase"
 date: 2024-11-02 00:00:00 -0000
 categories: Python
 tags: ["python", "pytorch", "transfer learning", "image vision", "selective search", "opencv"]
 ---
 
-# Multiple bounding box detection, Part 2 - preparing region proposals for fine tuning phase
+# Multiple bounding box detection, Part 2 - preparing region proposals for the fine tuning phase
 
 The second part of the title may be a bit surprising to some. Didn't we just prepare the data in [this post](https://mmalek06.github.io/python/2024/08/04/multiple-bounding-box-detection-part1.html)? The thing is, that was only phase one. But where's the initial training phase, you may ask? Well, the authors of the [original R-CNN paper](https://arxiv.org/pdf/1311.2524v5) mention pretraining a CNN on an auxiliary dataset (ILSVRC2012 - this is noted on page 3 of the linked PDF). However, [this youtube video](https://youtu.be/5DvljLV4S1E?t=831) says that they only fine-tuned a pretrained AlexNet.
 
