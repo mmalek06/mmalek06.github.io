@@ -104,7 +104,7 @@ def find_adaptive_regions(image, min_area=250):
     <img style="width: 360px; float: left" src="https://mmalek06.github.io/images/custom_ss_3.png" /><br />
     <img style="width: 360px; float: right" src="https://mmalek06.github.io/images/custom_ss_4.png" /><br />
 </div>
-
+<br />
 It's not half bad, isn't it? The thing is that this outputs small regions for certain images and for some it's not even proposing any regions, where there should be at least a few. SS does much better and obviously it's use is much less involved:
 
 ```python
@@ -138,7 +138,7 @@ The R-CNN paper authors mention that in their case they got around 2k proposals 
     <img style="width: 360px; float: left" src="https://mmalek06.github.io/images/premade_ss_1.png" /><br />
     <img style="width: 360px; float: right" src="https://mmalek06.github.io/images/premade_ss_2.png" /><br />
 </div>
-
+<br />
 The last piece of the puzzle is the proposal builder functionality. You'll notice that I'm capping the number of negative proposals saved to disk at 400 - this is for performance reasons. The proposal generation process already takes hours, and if I saved every 20x20px proposal image, it would quickly consume all my disk space. However, because positive proposals are very rare, I'm not limiting those.
 
 I'm also sorting the proposals by area in descending order to obtain the most relevant ones. This is based on the dataset's characteristics - it doesn't contain many small cracks, so there's no point in considering the smallest proposals as good candidates. Finally, resizing is necessary since I've chosen a feature extractor CNN with an expected input size of 224x224.
