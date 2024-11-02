@@ -1,200 +1,292 @@
 ---
 layout: post
 title: "Multiple bounding box detection, Part 2 - searching for a backbone network"
-date: 2025-08-29 00:00:00 -0000
+date: 2024-11-02 00:00:00 -0000
 categories: Python
-tags: ["python", "pytorch", "transfer learning", "image vision"]
+tags: ["python", "pytorch", "transfer learning", "image vision", "selective search", "opencv"]
 ---
 
-# Multiple bounding box detection, Part 2 - searching for a backbone network for R-CNN architecture
+# Multiple bounding box detection, Part 2 - preparing region proposals for fine tuning phase
 
-One of the key components in the R-CNN architecture is the so-called "backbone network." It sits between the region proposal module and the final module responsible for bounding box regression. Its purpose is to extract features from the region proposals and feed them into the final module. The [original R-CNN paper](https://arxiv.org/pdf/1311.2524v5) mentioned using [the Caffe implementation of CNN](https://caffe.berkeleyvision.org/). However, there are now many pretrained classifier networks that can serve as backbone networks in the R-CNN architecture. 
+The second part of the title may be a bit surprising to some. Didn't we just prepare the data in [this post](https://mmalek06.github.io/python/2024/08/04/multiple-bounding-box-detection-part1.html)? The thing is, that was only phase one. But where's the initial training phase, you may ask? Well, the authors of the [original R-CNN paper](https://arxiv.org/pdf/1311.2524v5) mention pretraining a CNN on an auxiliary dataset (ILSVRC2012—this is noted on page 3 of the linked PDF). However, [this youtube video](https://youtu.be/5DvljLV4S1E?t=831) says that they only fine-tuned a pretrained AlexNet.
 
-In this article, I'll explore two approaches:
-
-1. Training a small, custom-made neural network to serve as a baseline. I don't expect it to be a part of the final solution, but out of sheer curiosity I'd like to see how it does in the context of this problem when compared to something better.
-2. Using a pretrained `resnext50_32x4d` model from `torchvision.models`.
+For my work, it doesn’t make much difference. I don't have enough time to train a feature extractor from scratch, so I'll use a good, pretrained CNN and fine-tune its weights. Additionally, I plan to see if I can optimize the chosen CNN for this specific task. In AI lore, the layers closer to the network output detect more general features, like noses, eyes, or doors - large, recognizable elements. For this task, however, this may not be necessary since it's theoretically simple: there's only one class, and the entities are essentially lines and curves.
 
 ## Requirements
 
-The single requirement is to see which one of the two networks performs better. The original paper mentioned using a NN trained on a dataset different than the one used for testing the full R-CNN idea implementation, so I'll do the same.
+- Experiment with custom region proposal algorithm for the sake of learning
+- Use selective search for finding good region proposals
+- Save the proposals on disk for later use
 
 ## The code
 
-I didn't want to spend too much time finding the best architecture because the assumption was that, no matter how much time I spent, I still wouldn't be able to outperform any of the pretrained networks. That's why I created this small network that includes two modules:
+Fortunately, there's no need to implement selective search (SS) from scratch, as the god-like authors of the OpenCV library have already done it for us. I experimented with implementing parts of what I understood from the selective search description for fun and even achieved some surprisingly good results. However, my attempts didn't come close to the quality of the ready-made algorithm.
 
-1. `feature_extractor`: As the name suggests, its sole purpose is to find kernels capable of extracting features useful in crack detection.
-2. `classifier`: Although crack detection is technically a regression problem, I needed a way to score how well my `feature_extractor` performs. To do this, I translated the regression problem back into a classification problem. If the classifier detects cracks in the image, it indicates that the previous module did a good job extracting features.
-
-```python
-import torch
-import torch.nn as nn
-
-
-class CustomClassifier(nn.Module):
-    def __init__(
-            self,
-            input_shape: tuple[int, int, int] = (3, 224, 224),
-            conv_out_shapes: tuple[int, int] = (64, 128),
-            linear_layers_features: int = 512
-    ):
-        super().__init__()
-
-        self.feature_extractor = nn.Sequential(
-            nn.Conv2d(3, conv_out_shapes[0], kernel_size=3, stride=1, padding=1),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Conv2d(conv_out_shapes[0], conv_out_shapes[1], kernel_size=3, stride=1, padding=1),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2)
-        )
-        self.classifier = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(self._get_feature_size(input_shape), linear_layers_features),
-            nn.ReLU(inplace=True),
-            nn.Linear(linear_layers_features, linear_layers_features),
-            nn.ReLU(inplace=True),
-            nn.Linear(linear_layers_features, 1),
-            nn.Sigmoid()
-        )
-
-    def _get_feature_size(self, shape):
-        with torch.no_grad():
-            dummy_input = torch.zeros(1, *shape)
-            features = self.feature_extractor(dummy_input)
-
-            return features.numel()
-
-    def forward(self, x):
-        x = self.feature_extractor(x)
-        x = self.classifier(x)
-
-        return x
-```
-
-<b>Side note:</b> `Linear` layer could have been the last one, but then the loss function would have to be `BCEWithLogitsLoss`, as it uses sigmoid internally. However, then one has to remember about using  sigmoid at prediction time to get values in the `[0, 1]` range.
-
-After defining the architecture, I created the typical training-and-validation loop code, but I won't include it here as it's quite long and self-explanatory. If you're interested, you can see everything [in my repository](https://github.com/mmalek06/crack-detection/blob/main/0.3_custom_classifier.ipynb).
-
-Since this architecture is small and trains quickly, I decided to use four sets of hyperparameters to search for the best combination. Additionally, to save time if I want to run the notebook multiple times, I implemented a checkpoint system. If a checkpoint file is present for a given hyperparameter combination, it will be loaded and used instead of rerunning the training.
+<b>Side note</b>: for those interested, my custom algorithm focused mainly on detecting color differences—one of the key aspects of SS. I'll attach it here for completeness.
 
 ```python
-model_results = []
-param_combinations = [
-    {
-        "conv_out_shapes": (64, 128),
-        "linear_layers_features": 256,
-    },
-    {
-        "conv_out_shapes": (128, 256),
-        "linear_layers_features": 512,
-    },
-    {
-        "conv_out_shapes": (64, 128),
-        "linear_layers_features": 512,
-    },
-    {
-        "conv_out_shapes": (64, 128),
-        "linear_layers_features": 1024,
-    },
-]
-
-for param_combination in param_combinations:
-    model_custom_path = "_".join(map(str, param_combination["conv_out_shapes"]))
-    model_custom_path = f"{param_combination['linear_layers_features']}_{model_custom_path}"
-    checkpoint_path = os.path.join("checkpoints", f"custom_classifier_{model_custom_path}.pt")
-    history_path = os.path.join("checkpoints", f"history_{model_custom_path}.pkl")
-
-    if os.path.exists(checkpoint_path):
-        with open(history_path, "rb") as history_file:
-            history = pickle.load(history_file)
-
-        model, _, criterion, _, device = get_loop_objects(
-            param_combination["conv_out_shapes"], 
-            param_combination["linear_layers_features"]
-        )
-        checkpoint = torch.load(checkpoint_path, map_location=device)
-        
-        model.load_state_dict(checkpoint)
-
-        _, valid_loader = get_loaders()
-        valid_accuracy, valid_loss = validate(model, valid_loader, criterion, {"valid_loss": []})
-        
-        model_results.append((checkpoint_path, history, valid_accuracy))
-        print(f"Checkpoint already exists for {checkpoint_path}. Skipping...")
+def calculate_average_brightness(image):
+    if len(image.shape) == 3:
+        image_gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
     else:
-        history, validation_acc = run_training_loop(
-            param_combination["conv_out_shapes"], 
-            param_combination["linear_layers_features"], 
-            checkpoint_path,
-            history_path
-        )
-    
-        model_results.append((checkpoint_path, history, validation_acc))
-        torch.cuda.empty_cache()
+        image_gray = image
 
-max_tuple = max(model_results, key=lambda x: x[2])
+    average_brightness = np.mean(image_gray)
 
-print(f"Max model accuracy is: {max_tuple[2]}, checkpoint path: {max_tuple[0]}")
+    return average_brightness
+
+def adaptive_thresholding(image, average_brightness, threshold_offsets=[40, 80, 120]):
+    if len(image.shape) == 3:
+        image_gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+    else:
+        image_gray = image
+
+    thresholded_images = []
+
+    for offset in threshold_offsets:
+        if average_brightness + offset < 255:
+            _, thresh_image = cv2.threshold(image_gray, average_brightness + offset, 255, cv2.THRESH_BINARY)
+            thresholded_images.append(thresh_image)
+
+    for offset in threshold_offsets:
+        if average_brightness - offset > 0:
+            _, thresh_image = cv2.threshold(image_gray, average_brightness - offset, 255, cv2.THRESH_BINARY_INV)
+            thresholded_images.append(thresh_image)
+
+    # Return all threshold variations separately
+    return thresholded_images
+
+
+def apply_morphological_closing(image, kernel_size=(5, 5)):
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, kernel_size)
+    closed_image = cv2.morphologyEx(image, cv2.MORPH_CLOSE, kernel)
+
+    return closed_image
+
+def detect_and_filter_components(image, min_area):
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(image, connectivity=8)
+    filtered_components = []
+
+    for i in range(1, num_labels):  # Start from 1 to skip the background
+        x, y, w, h, area = stats[i]
+
+        if area >= min_area:
+            filtered_components.append((x, y, w, h))
+
+    return filtered_components
+
+
+def find_adaptive_regions(image, min_area=250):
+    average_brightness = calculate_average_brightness(image)
+    thresholded_images = adaptive_thresholding(image, average_brightness)
+
+    all_regions = []
+
+    for thresh_image in thresholded_images:
+        closed_image = apply_morphological_closing(thresh_image)
+        regions = detect_and_filter_components(closed_image, min_area)
+        all_regions.extend(regions)
+
+    return all_regions
 ```
 
-Using this code revealed that the best hyperparameter combination includes `1024` units in the linear layers of the classifier and `64` and `128` out_channels for the two `Conv2d` layers. I also like to inspect the network activations to visually confirm that the kernels found are actually guiding the network in the desired direction.
+- `calculate_average_brightness` is kind of self explanatory, so I'll omit its description.
+- `adaptive_thresholding` is more interesting function. The idea here is to expand the input image into a set of black and white images where each would capture brighter (the first if statement) and darker (the second one) regions. If you go through the dataset, you'll see that the cracks stand out - they are either brighter or darker, so this function tries to capture that trait of the dataset.
+- `apply_morphological_closing` the body of the function looks similar to what I did in the previous post in this series. It tries to merge regions that are very close to each other - the `adaptive_thresholding` function helps with that by making the image BW.
+- `detect_and_filter_components` is essential for isolating and focusing on significant regions within the image while discarding smaller, potentially irrelevant ones. The function uses OpenCV's `cv2.connectedComponentsWithStats` to perform a connected component analysis on the input binary image. This method groups connected pixels into distinct labeled components, effectively identifying each "region" in the image.
+- `find_adaptive_regions` orchestrates all the operations and returns region proposals.
 
-<img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/filters_level1_1.png" /><br />
-<img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/filters_level1_2.png" />
+<div>
+    <img style="float: left" src="https://mmalek06.github.io/images/custom_ss_1.png" /><br />
+    <img style="float: right" src="https://mmalek06.github.io/images/custom_ss_2.png" /><br />
+</div>
+<br />
+<div>
+    <img style="float: left" src="https://mmalek06.github.io/images/custom_ss_3.png" /><br />
+    <img style="float: right" src="https://mmalek06.github.io/images/custom_ss_4.png" /><br />
+</div>
 
-Some activations are good and make the crack stand out more, while others make it slightly less visible. Let's take a look at the activations from the second `Conv2d` layer:
-
-<img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/filters_level2_1.png" />
-
-Visual inspection reveals that more of the second layer's filters "made sense" - more of them made the crack stand out, which can be considered evidence that this architecture managed to converge for good reasons. As for the achieved accuracy, it was equal to `96.4%`. For me it was surprisingly good for such a small model and the complexity of the problem at hand. Or maybe I was mistaken, and the problem is not so hard :)
-
-For the pretrained network, I decided to go with the `resnext50_32x4d` model from `torchvision.models`. I chose this model because it was one of the newer options available in the package. The architecture definition changed slightly:
+It's not half bad, isn't it? The thing is that this outputs small regions for certain images and for some it's not even proposing any regions, where there should be at least a few. SS does much better and obviously it's use is much less involved:
 
 ```python
-import torch
-import torch.nn as nn
-import torchvision.models as models
+def perform_selective_search(image: np.ndarray) -> Iterable[int]:
+    ss = cv2.ximgproc.segmentation.createSelectiveSearchSegmentation()
 
-from torchvision.models import ResNeXt50_32X4D_Weights
+    ss.setBaseImage(image)
+    ss.switchToSelectiveSearchFast()
 
+    rects = ss.process()
+    boxes = []
+    image_area = image.shape[0] * image.shape[1]
 
-class Resnext50BasedClassifier(nn.Module):
-    def __init__(
-            self,
-            input_shape: tuple[int, int, int] = (3, 224, 224),
-            linear_layers_features: int = 512
-    ):
-        super().__init__()
+    for (x, y, w, h) in rects:
+        area = w * h
 
-        self.feature_extractor = models.resnext50_32x4d(weights=ResNeXt50_32X4D_Weights.DEFAULT)
-        self.classifier = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(self._get_feature_size(input_shape), linear_layers_features),
-            nn.ReLU(inplace=True),
-            nn.Linear(linear_layers_features, linear_layers_features),
-            nn.ReLU(inplace=True),
-            nn.Linear(linear_layers_features, 1),
-            nn.Sigmoid()
-        )
+        if area == image_area:
+            continue
 
-    def _get_feature_size(self, shape):
-        with torch.no_grad():
-            dummy_input = torch.zeros(1, *shape)
-            features = self.feature_extractor(dummy_input)
+        boxes.append((x, y, x + w, y + h, area))
 
-            return features.numel()
+    boxes = sorted(boxes, key=lambda b: b[4], reverse=True)
+    boxes = [(x1, y1, x2, y2) for x1, y1, x2, y2, area in boxes]
 
-    def forward(self, x):
-        x = self.feature_extractor(x)
-        x = self.classifier(x)
-
-        return x
+    return boxes
 ```
 
-You may notice that I'm not freezing the `feature_extractor` weights, which is a common practice when using transfer learning. I chose not to do this because I noticed a slight accuracy improvement when allowing the weights to be trained. The model stopped improving after 7 epochs, and the final result was nearly perfect - a validation accuracy of `99.94%` with a validation loss of `0.0001`.
+The R-CNN paper authors mention that in their case they got around 2k proposals per image. However, if you try running this function on the crack dataset I'm using, you'll be lucky if it produces a thousand proposals. It's understandable. Crack images are usually very gray, don't show varying structures like people, cars, or buildings. Below I attach two outputs (I also limited the number of boxes to 100):
 
+<div>
+    <img style="float: left" src="https://mmalek06.github.io/images/premade_ss_1.png" /><br />
+    <img style="float: right" src="https://mmalek06.github.io/images/premade_ss_2.png" /><br />
+</div>
+
+The last piece of the puzzle is the proposal builder functionality. You'll notice that I'm capping the number of negative proposals saved to disk at 400 - this is for performance reasons. The proposal generation process already takes hours, and if I saved every 20x20px proposal image, it would quickly consume all my disk space. However, because positive proposals are very rare, I'm not limiting those.
+
+I'm also sorting the proposals by area in descending order to obtain the most relevant ones. This is based on the dataset's characteristics - it doesn't contain many small cracks, so there's no point in considering the smallest proposals as good candidates. Finally, resizing is necessary since I've chosen a feature extractor CNN with an expected input size of 224x224.
+
+```python
+class DatasetKind(StrEnum):
+    TRAIN = "train"
+    VALID = "valid"
+
+
+class ProposalBuilder:
+    def __init__(
+            self,
+            coco_file_path: str,
+            images_dir: str,
+            is_train: bool = True
+    ):
+        with open(coco_file_path, "r") as f:
+            self.coco_data = json.load(f)
+
+        self.original_dataset_dir = images_dir
+        self.is_train = is_train
+        self.image_data = [
+            img
+            for img in self.coco_data["images"]
+            if ProposalBuilder._load_image(os.path.join(self.original_dataset_dir, img["file_name"])) is not None
+        ]
+        self.annotations = self._group_annotations_by_image(self.coco_data["annotations"])
+
+    def build_proposal_set(self, kind: DatasetKind):
+        # need to put the proposal set outside the current repo, because some tooling goes crazy if it sees too many files
+        # for example DataSpell tries to reindex everything even though I excluded that folder
+        proposal_set_path = os.path.join("..", "..", "datasets", "transformed", "crack-detection", "proposals", kind.value)
+        os.makedirs(proposal_set_path, exist_ok=True)
+    
+        transforms = v2.Compose([
+            v2.ToPILImage(),
+            v2.Resize((224, 224))
+        ])
+        positive_count = 0
+        negative_count = 0
+        total_count = -1
+    
+        for idx, row in enumerate(self.coco_data["images"]):
+            image_path = os.path.join(self.original_dataset_dir, row["file_name"])
+            image = ProposalBuilder._load_image(image_path)
+            proposals = perform_selective_search(image)
+            proposal_areas = [(proposal, proposal[2] - proposal[0]) * (proposal[3] - proposal[1]) for proposal in proposals]
+            sorted_proposals = sorted(proposal_areas, key=lambda x: x[1], reverse=True)
+            sorted_proposals = torch.Tensor([proposal[0] for proposal in sorted_proposals])
+            ground_truth_boxes = torch.tensor(
+                self._parse_annotations(self.annotations.get(row["id"], [])),
+                dtype=torch.float32
+            )
+
+            if not torch.any(sorted_proposals) or ground_truth_boxes.numel() == 0:
+                continue
+            
+            ious = torchvision.ops.box_iou(sorted_proposals, ground_truth_boxes)
+            labels = (ious.max(dim=1)[0] > 0.5).float()
+            original_filename, file_extension = row["file_name"].split(".")
+    
+            for counter, (proposal, iou, label) in enumerate(zip(sorted_proposals, ious, labels)):
+                if total_count < 5996384:
+                    total_count += 1
+                    
+                    continue
+                
+                cropped_image = image[int(proposal[1]):int(proposal[3]), int(proposal[0]):int(proposal[2])]
+                cropped_image = torch.tensor(cropped_image).permute(2, 0, 1)  # Change (H, W, C) to (C, H, W)
+                resized_proposal = transforms(cropped_image)
+                iou_score = round(iou.max().item(), 2)
+                proposal_filename = f"{original_filename}.{counter}.{str(iou_score).replace('.', '_')}.{int(label.item())}.{file_extension}"
+                proposal_filepath = os.path.join(proposal_set_path, proposal_filename)
+    
+                resized_proposal.save(proposal_filepath)
+
+                if label.item() > 0.5:
+                    resized_proposal.save(proposal_filepath)
+
+                    positive_count += 1
+                else:
+                    if counter <= 400:
+                        resized_proposal.save(proposal_filepath)
+                        
+                        negative_count += 1
+    
+            if (idx + 1) % 100 == 0:
+                print(f"Processed {idx + 1} images...")
+                print(f"Positive proposals in last 100 images: {positive_count}")
+                print(f"Negative proposals in last 100 images: {negative_count}")
+    
+                positive_count = 0
+                negative_count = 0
+
+    def __len__(self) -> int:
+        return len(self.image_data)
+
+    @staticmethod
+    def _group_annotations_by_image(annotations: list[dict]) -> dict[int, list[dict]]:
+        grouped_annotations = {}
+
+        for annotation in annotations:
+            image_id = annotation["image_id"]
+
+            if image_id not in grouped_annotations:
+                grouped_annotations[image_id] = []
+
+            grouped_annotations[image_id].append(annotation)
+
+        return grouped_annotations
+
+    @staticmethod
+    def _parse_annotations(annotations: list[dict]) -> np.ndarray:
+        """
+        Returns:
+        - bboxes: A list of bounding boxes in the format [x_min, y_min, x_max, y_max].
+        """
+        bboxes = []
+
+        for annotation in annotations:
+            bbox = annotation.get("bbox", [])
+
+            if not bbox or len(bbox) != 4:
+                continue
+
+            x_min, y_min, width, height = map(int, bbox)
+
+            if width <= 0 or height <= 0:
+                continue
+
+            x_max, y_max = x_min + width, y_min + height
+
+            bboxes.append([x_min, y_min, x_max, y_max])
+
+        if not bboxes:
+            return np.zeros((0, 4), dtype=np.float32)
+
+        return np.array(bboxes, dtype=np.float32)
+
+    @staticmethod
+    def _load_image(image_path: str) -> np.ndarray:
+        image = cv2.imread(image_path, cv2.IMREAD_COLOR)
+
+        return image
+```
 
 ## Summary and next steps
 
-It's clear that the pretrained architecture outperformed the custom one, so that's the one I'll use as the backbone network in the next article. However, it's important to consider that this might not always be the default approach for every problem. In the case of a smaller problem, it might be better to use a small, custom architecture, even if it's slightly less accurate. The reason is that a smaller network could offer faster inference times, which could be a significant advantage if inference speed is a critical factor.
+The proposals have been generated. The next step is to run a so called backbone network (so a pretrained one) on them, so that it's tuned for extracting features from the given dataset better.
