@@ -122,7 +122,7 @@ def lambda_handler(event: APIGatewayProxyEvent, context: LambdaContext) -> dict:
     }
 ```
 
-The logic itself isn't very complex, but I want to highlight one key point: the use of the `aws-lambda-powertools` library. Coming from a background in compiled languages (C#, Scala), I often find it frustrating when Python programmers skip type hints, relying on dictionaries and magic strings instead. We can make our lives much easier by leveraging all the available tools in our chosen language.
+The `AWS_SAM_LOCAL` env variable is set by sam itself when you run `sam local start-api`. As for the logic - it isn't very complex, but I want to highlight one key point: the use of the `aws-lambda-powertools` library. Coming from a background in compiled languages (C#, Scala), I often find it frustrating when Python programmers skip type hints, relying on dictionaries and magic strings instead. We can make our lives much easier by leveraging all the available tools in our chosen language.
 
 In the Python Lambda context, that's where the `aws-lambda-powertools` library shines. It provides type-safe members specific to certain Lambda trigger types. Here, since the Lambda will be called via an API Gateway, we use the appropriate decorator, specifying that we expect an `APIGatewayProxyEvent`. This allows me to use the exposed `json_body` property directly within the function. And they really have it all. Is your lambda processing Kafka events? Use `@event_source(data_class=KafkaEvent)`. Is it using Kinesis Event Streams? Use: `@event_source(data_class=KinesisStreamEvent)`.
 
