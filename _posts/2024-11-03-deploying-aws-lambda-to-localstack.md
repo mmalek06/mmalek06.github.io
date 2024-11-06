@@ -76,9 +76,11 @@ As you can see, the model is able to identify and correctly classify only 40% of
 
 ## The code - part 2: defining lambda function and sam templates
 
-To create the Lambda folder, I used `sam cli` and added Lambda layers on top of it. You'll often encounter Lambda layers in projects with a sufficiently large number of Lambdas, because at some point, as in any big project, code tends to repeat. Lambda layers allow you to place shared code or libraries inside them (especially useful if, for some reason, you don't want to publish them in your company's artifact repository).
+To create the Lambda folder, I used `sam cli` tool. Initially, I wanted to use Lambda layers, which worked locally with `sam cli`, but failed when I deployed to the cloud. I had created one layer for model-related files and another for dependencies. However, the dependencies (like sklearn, pandas etc.) added up to over 250 MB, which is AWS's layer size limit for a single Lambda. With no way around this limitation, I turned to an alternative approach: Docker containers. AWS introduced Lambda container support a few years ago, and I must say, the developer experience is excellent.
 
-Here, I'm using Lambda layers in another common way - by placing my machine learning models there, so the Lambda function can access them. Below is the project layout:
+Before diving into containers, a note on Lambda layers: dependencies must be built on Linux. If you build a layer with dependencies on Windows (using `pip install -r requirements.txt --target layers/lambda_dependencies_layer/python/`), it will include some Windows-specific components. This might work when testing locally with SAM, but will fail after deployment. I encountered [this error](https://stackoverflow.com/questions/77915868/module-os-has-no-attribute-add-dll-directory-in-aws-lambda-function): [ERROR] AttributeError: module 'os' has no attribute 'add_dll_directory'. The error disappeared when I built my dependencies layer in WSL, but I still had to switch to a Dockerized Lambda due to the size issue.
+
+To wrap up this section, here's a screenshot of my project layout:
 
 <img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/lambda_terraform_project_layout.png" /><br />
 
@@ -95,13 +97,8 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 
-if os.getenv("AWS_SAM_LOCAL"):
-    model_file = os.path.join("app", "model_layer", "python", "model", "logistic_regression_model.pkl")
-    vectorizer_file = os.path.join("app", "model_layer", "python", "model", "vectorizer.pkl")
-else:
-    model_file = os.getenv("MODEL_FILE")
-    vectorizer_file = os.getenv("VECTORIZER_FILE")
-
+model_file = os.getenv("MODEL_FILE")
+vectorizer_file = os.getenv("VECTORIZER_FILE")
 model: LogisticRegression = joblib.load(model_file)
 vectorizer: TfidfVectorizer = joblib.load(vectorizer_file)
 
@@ -122,7 +119,7 @@ def lambda_handler(event: APIGatewayProxyEvent, context: LambdaContext) -> dict:
     }
 ```
 
-The `AWS_SAM_LOCAL` env variable is set by sam itself when you run `sam local start-api`. As for the logic - it isn't very complex, but I want to highlight one key point: the use of the `aws-lambda-powertools` library. Coming from a background in compiled languages (C#, Scala), I often find it frustrating when Python programmers skip type hints, relying on dictionaries and magic strings instead. We can make our lives much easier by leveraging all the available tools in our chosen language.
+The logic here is not complex at all, but I want to highlight one key point: the use of the `aws-lambda-powertools` library. Coming from a background in compiled languages (C#, Scala), I often find it frustrating when Python programmers skip type hints, relying on dictionaries and magic strings instead. We can make our lives much easier by leveraging all the available tools in our chosen language.
 
 In the Python Lambda context, that's where the `aws-lambda-powertools` library shines. It provides type-safe members specific to certain Lambda trigger types. Here, since the Lambda will be called via an API Gateway, we use the appropriate decorator, specifying that we expect an `APIGatewayProxyEvent`. This allows me to use the exposed `json_body` property directly within the function. And they really have it all. Is your lambda processing Kafka events? Use `@event_source(data_class=KafkaEvent)`. Is it using Kinesis Event Streams? Use: `@event_source(data_class=KinesisStreamEvent)`.
 
@@ -131,57 +128,170 @@ In the Python Lambda context, that's where the `aws-lambda-powertools` library s
 Now to the sam template:
 
 ```yaml
-AWSTemplateFormatVersion: '2010-09-09'
-Transform: AWS::Serverless-2016-10-31
-
 Resources:
   SentimentPredictorFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: app.app.lambda_handler
-      Runtime: python3.12
-      CodeUri: ./
+      PackageType: Image
+      ImageUri: sentimentpredictor:latest
       MemorySize: 128
       Timeout: 900
-      Environment:
-        Variables:
-          MODEL_FILE: "/opt/python/model/logistic_regression_model.pkl"
-          VECTORIZER_FILE: "/opt/python/model/vectorizer.pkl"
-      Layers:
-        - !Ref ModelLayer
       Events:
         SentimentPostAPI:
           Type: Api
           Properties:
-            RestApiId: !Ref SentimentPredictorApi
             Path: /predict
             Method: POST
-
-  SentimentPredictorApi:
-    Type: AWS::Serverless::Api
-    Properties:
-      Name: SentimentPredictorApi
-      StageName: prod
-
-  ModelLayer:
-    Type: AWS::Serverless::LayerVersion
-    Properties:
-      LayerName: ModelLayer
-      ContentUri: app/model_layer/
-      CompatibleRuntimes:
-        - python3.12
-
-Outputs:
-  SentimentPredictorApiUrl:
-    Value: !Sub "https://${SentimentPredictorApi}.execute-api.${AWS::Region}.amazonaws.com/prod/predict"
-    Description: "API endpoint URL for sentiment prediction"
 ```
 
-The sam-cli generated template had a lot of noise in it, so I decided to rewrite it from scratch. The environment variables will be used by the Lambda file when it's deployed to the cloud or LocalStack. The paths are not random - it turns out that the assets found in Lambda Layers get deployed to the `/opt` location. Another important thing to notice is the `RestApiId` in the `Events` section of `SentimentPredictorFunction`. What it does is it connects the Lambda with the api that will be provisioned when we run `sam deploy` command - without it AWS would say that no URL was found in the api.
+Again, this is very basic, as the use of Docker simplified everything greatly. `ImageUri` points to the locally built image, environment variables tell the lambda where to look for model related files and the template ends with the api definition. Couldn't be simpler, and the same goes for the `Dockerfile`:
+
+```dockerfile
+FROM public.ecr.aws/lambda/python:3.12
+
+COPY app/ ${LAMBDA_TASK_ROOT}/app/
+COPY model/logistic_regression_model.pkl /opt/model/logistic_regression_model.pkl
+COPY model/vectorizer.pkl /opt/model/vectorizer.pkl
+ENV MODEL_FILE=/opt/model/logistic_regression_model.pkl
+ENV VECTORIZER_FILE=/opt/model/vectorizer.pkl
+COPY app/requirements.txt .
+RUN pip install -r requirements.txt --target "${LAMBDA_TASK_ROOT}"
+CMD ["app.src.app.lambda_handler"]
+```
+
+`LAMBDA_TASK_ROOT` is an environment variable in AWS Lambda that specifies the root directory of the deployed Lambda function's code. AWS Lambda uses this directory to store the function's code package after deployment. Another thing to note here is where I've put the model-related files: in the /opt directory. It might as well be put anywhere, but it turns out lambda layers are put there. I thought that for people having some experience with them, this location would look familiar.
 
 This was fun, especially so, because everything is working correctly. If I run this lambda locally using sam cli, it's reachable under `http://127.0.0.1:3000/predict` and if I deploy it to AWS, it also gets exposed publicly: `https://random-string.execute-api.us-east-1.amazonaws.com/prod/predict`. Now onto more fun and that's deploying it all to LocalStack using Terraform!
 
-## The code - part 3: creating terraform definitions and deploying to LocalStack
+## The code - part 3: creating Terraform definitions
+
+The first important piece of Terraform code is found in the `02.ecr.tf` file (I like to use a naming convention with numbers at the beginning of each item, as it gives me a clear view of the sequence of events during deployment). For sure you'll notice the multiple `provisioner` blocks. At first I tried putting it all as a single `HEREDOC`, but for some reason it didn't want to work. Additionally, the official Terraform documentation suggests this approach, so I followed their guidance. There's also one subtlety hidden here: `--provenance=false` - without this flag set, I kept getting `The image manifest or layer media type for the source image <image_source> is not supported.` error. I managed to [find a solution](https://stackoverflow.com/a/75149347/2385132), but I didn't really dig deep enough to understand what's causing it. Sometimes it's ok to let a little bit of magic in ;)
+
+```plaintext
+resource "aws_ecr_repository" "sentiment_predictor_repo" {
+  name = var.ecr_repository_name
+}
+
+data "aws_ecr_authorization_token" "auth" {}
+
+resource "null_resource" "docker_push" {
+  provisioner "local-exec" {
+    command = "aws ecr get-login-password --region ${var.region} --profile ${var.profile} | docker login --username AWS --password-stdin ${data.aws_ecr_authorization_token.auth.proxy_endpoint}"
+  }
+
+  provisioner "local-exec" {
+    command = "docker build --provenance=false -t ${var.ecr_repository_name} .."
+  }
+
+  provisioner "local-exec" {
+    command = "docker tag ${var.ecr_repository_name}:latest ${var.account_id}.dkr.ecr.${var.region}.amazonaws.com/${var.ecr_repository_name}:latest"
+  }
+
+  provisioner "local-exec" {
+    command = "docker push ${var.account_id}.dkr.ecr.${var.region}.amazonaws.com/${var.ecr_repository_name}:latest"
+  }
+
+  depends_on = [aws_ecr_repository.sentiment_predictor_repo]
+}
+```
+
+IAM roles are quite basic, so I'll just drop their definitions here without any comment, the same goes for lambda:
+
+```plaintext
+resource "aws_iam_role" "lambda_exec_role" {
+  name = "lambda_exec_role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+    }]
+  })
+}
+
+resource "aws_iam_policy_attachment" "lambda_policy_attachment" {
+  name       = "SentimentPredictor lambda execution policy"
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+  roles      = [aws_iam_role.lambda_exec_role.name]
+}
+
+resource "aws_lambda_function" "sentiment_predictor" {
+  function_name = "SentimentPredictorFunction"
+  role          = aws_iam_role.lambda_exec_role.arn
+  package_type  = "Image"
+  image_uri     = "${aws_ecr_repository.sentiment_predictor_repo.repository_url}:latest"
+  memory_size   = 128
+  timeout       = 900
+
+  environment {
+    variables = {
+      MODEL_FILE      = "/opt/model/logistic_regression_model.pkl"
+      VECTORIZER_FILE = "/opt/model/vectorizer.pkl"
+    }
+  }
+
+  depends_on = [null_resource.docker_push]
+}
+```
+
+As for the `API gateway` - this configuration sets up an AWS API Gateway to expose a Lambda function as a RESTful HTTP endpoint. Here's what each resource is doing:
+
+1. API Gateway:
+- Creates an HTTP API Gateway called `SentimentPredictorApi`.
+2. Lambda Integration:
+- Configures the API Gateway to integrate with a Lambda function (`sentiment_predictor`).
+- Uses `AWS_PROXY` as the integration type, meaning the request is directly forwarded to the Lambda function.
+- Specifies the payload format version 2.0, which is standard for HTTP APIs with Lambda proxy integrations.
+3. Route:
+- Defines a route for the API that triggers on a POST request to the `/predict` path.
+- Connects the route to the previously defined Lambda integration, enabling the route to invoke the Lambda.
+4. Stage:
+- Deploys the API in a prod stage, enabling access to the endpoint.
+- Sets `auto_deploy` to true, allowing any changes to the API configuration to automatically be deployed. With `auto_deploy` enabled, as soon as the Terraform code is applied, the changes go live in the specified stage automatically.
+5. Lambda Permission:
+- Grants API Gateway permission to invoke the Lambda function.
+- Uses the ARN of the API Gateway to limit the invocation permissions specifically to requests coming from this API.
+
+```plaintext
+resource "aws_apigatewayv2_api" "sentiment_predictor_api" {
+  name          = "SentimentPredictorApi"
+  protocol_type = "HTTP"
+}
+
+resource "aws_apigatewayv2_integration" "lambda_integration" {
+  api_id                 = aws_apigatewayv2_api.sentiment_predictor_api.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.sentiment_predictor.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "predict_route" {
+  api_id    = aws_apigatewayv2_api.sentiment_predictor_api.id
+  route_key = "POST /predict"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda_integration.id}"
+}
+
+resource "aws_apigatewayv2_stage" "prod_stage" {
+  api_id      = aws_apigatewayv2_api.sentiment_predictor_api.id
+  name        = "prod"
+  auto_deploy = true
+}
+
+resource "aws_lambda_permission" "api_gateway_invoke" {
+  statement_id  = "AllowAPIGatewayInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.sentiment_predictor.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.sentiment_predictor_api.execution_arn}/*/*"
+}
+
+output "api_gateway_url" {
+  value = "${aws_apigatewayv2_api.sentiment_predictor_api.api_endpoint}/prod/predict"
+}
+```
+
+## The code - part 4: deploying to LocalStack
 
 IN PROGRESS
 
