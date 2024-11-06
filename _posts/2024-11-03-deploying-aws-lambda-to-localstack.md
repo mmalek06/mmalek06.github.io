@@ -161,7 +161,7 @@ CMD ["app.src.app.lambda_handler"]
 
 `LAMBDA_TASK_ROOT` is an environment variable in AWS Lambda that specifies the root directory of the deployed Lambda function's code. AWS Lambda uses this directory to store the function's code package after deployment. Another thing to note here is where I've put the model-related files: in the /opt directory. It might as well be put anywhere, but it turns out lambda layers are put there. I thought that for people having some experience with them, this location would look familiar.
 
-This was fun, especially so, because everything is working correctly. If I run this lambda locally using sam cli, it's reachable under `http://127.0.0.1:3000/predict` and if I deploy it to AWS, it also gets exposed publicly: `https://random-string.execute-api.us-east-1.amazonaws.com/prod/predict`. Now onto more fun and that's deploying it all to LocalStack using Terraform!
+This was fun, especially so, because everything is working correctly. If I run this lambda locally using sam cli, it's reachable under `http://127.0.0.1:3000/predict`.
 
 ## The code - part 3: creating Terraform definitions
 
@@ -290,6 +290,8 @@ output "api_gateway_url" {
   value = "${aws_apigatewayv2_api.sentiment_predictor_api.api_endpoint}/prod/predict"
 }
 ```
+
+Now, if I deploy it to AWS, it gets exposed publicly: `https://random-string.execute-api.us-east-1.amazonaws.com/prod/predict`. Locally and in the cloud it's served via api gateway. Now onto more fun and that's deploying it all to LocalStack using Terraform!
 
 ## The code - part 4: deploying to LocalStack
 
