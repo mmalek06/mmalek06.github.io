@@ -378,4 +378,4 @@ Postman request issued agains `http://b3bc97d4.execute-api.localhost.localstack.
 
 ## Summary
 
-This was the most fun I've ever had with cloud and DevOps-related work, and what surprised me the most was how smoothly everything ran. The biggest surprise was LocalStack. Why? Well, LocalStack runs on Docker, and I also defined a container repository in my Terraform definitions. I was concerned that LocalStack wouldn't handle this "Docker inside Docker" recursion, but it did - beautifully, as always. I think LocalStack will become a go-to tool in my workflow whenever I'm working with AWS.
+This was a lot of fun! What surprised me the most was how smoothly everything ran with LocalStack. Why? Well, LocalStack runs on Docker, and I also defined a container repository in my Terraform definitions. I was concerned that LocalStack wouldn't handle this "Docker inside Docker" recursion, but it did - beautifully, as always. I think LocalStack will become a go-to tool in my workflow whenever I'm working with AWS.
