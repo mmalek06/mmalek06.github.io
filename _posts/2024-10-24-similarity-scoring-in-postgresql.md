@@ -40,8 +40,8 @@ SELECT
         COALESCE(t2.payload ->> 'sn', t2.payload ->> 'surname', '')
     ) AS similarity_ratio
 FROM
-    genie_user_revision t1,
-    user_revision t2
+    normalised_data t1,
+    unnormalised_data t2
 WHERE
     t1.id = 1 AND
     t1.payload ? 'lastName' AND
