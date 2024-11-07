@@ -350,6 +350,30 @@ try {
 }
 ```
 
+And this is the ecr definition for LocalStack (note the domain changes):
+
+```plaintext
+resource "aws_ecr_repository" "sentiment_predictor_repo" {
+  name = var.ecr_repository_name
+}
+
+resource "null_resource" "docker_push" {
+  provisioner "local-exec" {
+    command = "docker build --provenance=false -t ${var.ecr_repository_name} .."
+  }
+
+  provisioner "local-exec" {
+    command = "docker tag ${var.ecr_repository_name}:latest ${var.account_id}.dkr.ecr.${var.region}.localhost.localstack.cloud:4566/${var.ecr_repository_name}:latest"
+  }
+
+  provisioner "local-exec" {
+    command = "docker push ${var.account_id}.dkr.ecr.${var.region}.localhost.localstack.cloud:4566/${var.ecr_repository_name}:latest"
+  }
+
+  depends_on = [aws_ecr_repository.sentiment_predictor_repo]
+}
+```
+
 Postman request issued agains `http://b3bc97d4.execute-api.localhost.localstack.cloud:4566/predict` returns the expected response.
 
 ## Summary
