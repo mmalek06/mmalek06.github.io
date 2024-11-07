@@ -8,7 +8,7 @@ tags: ["cloud", "aws", "terraform", "localstack", "python", "sklearn", "sam-cli"
 
 # Deploying AWS lambda to LocalStack with Terraform
 
-With my R-CNN model training, I suddenly have a lot of free time, so I decided to use it to learn something new—specifically, LocalStack and Terraform integration. In this post, I'll create an AWS Lambda that wraps an sklearn `LogisticRegression` predictor (after all, this blog focuses on ML, AI, and cloud). I'll deploy it locally, first using the `sam cli` AWS tool, then to a LocalStack container, and finally to the cloud to confirm that everything works consistently across environments.
+With my R-CNN model training, I suddenly have a lot of free time, so I decided to use it to learn something new - specifically, LocalStack and Terraform integration. In this post, I'll create an AWS Lambda that wraps an sklearn `LogisticRegression` predictor (after all, this blog focuses on ML, AI, and cloud). I'll deploy it locally, first using the `sam cli` AWS tool, then to a LocalStack container, and finally to the cloud to confirm that everything works consistently across environments.
 
 I could have focused on just one part - the one mentioned in the title - but as a fullstack developer, I wanted to bundle everything together. This blog mainly serves as a personal knowledge repository, and I remember best when I have the full context.
 
