@@ -350,7 +350,9 @@ try {
 }
 ```
 
-And this is the ecr definition for LocalStack (note the domain changes):
+Can you see how unintrusive LocalStack is? It's very much possible you didn't even notice it's presence in the form of the `tflocal` (instead of just terraform) command call. Btw. they have some more drop-in replacements for AWS tools, for example instead of running `aws <command>` you'd run `awslocal <command>`.
+
+This is the ecr definition for LocalStack (note the domain changes):
 
 ```plaintext
 resource "aws_ecr_repository" "sentiment_predictor_repo" {
