@@ -144,7 +144,7 @@ Resources:
             Method: POST
 ```
 
-Again, this is very basic, as the use of Docker simplified everything greatly. `ImageUri` points to the locally built image, environment variables tell the lambda where to look for model related files and the template ends with the api definition. Couldn't be simpler, and the same goes for the `Dockerfile`:
+Again, this is very basic, as the use of Docker simplified everything greatly. `ImageUri` points to the locally built image and the template ends with the api definition. Couldn't be simpler, and the same goes for the `Dockerfile`:
 
 ```dockerfile
 FROM public.ecr.aws/lambda/python:3.12
