@@ -3,7 +3,7 @@ layout: post
 title: "Deploying AWS lambda to LocalStack with Terraform"
 date: 2024-11-03 00:00:00 -0000
 categories: Cloud
-tags: ["cloud", "aws", "terraform", "localstack", "python", "sklearn", "sam-cli"]
+tags: ["cloud", "aws", "terraform", "localstack", "python", "sklearn", "sam-cli", "powershell"]
 ---
 
 # Deploying AWS lambda to LocalStack with Terraform
@@ -295,8 +295,63 @@ Now, if I deploy it to AWS, it gets exposed publicly: `https://random-string.exe
 
 ## The code - part 4: deploying to LocalStack
 
-IN PROGRESS
+This part may seem hacky, but it's structured this way because Terraform's conditional expressions are limited. Essentially, to enable LocalStack deployment, I only needed to modify one Terraform definition - `02.ecr.tf`. The first issue was with this part: `data "aws_ecr_authorization_token" "auth" {}`. It caused trouble, and despite googling, I couldn't find an explanation. With this line present, tflocal threw a cryptic exception:
+
+```plaintext
+╷
+│ Error: Plugin did not respond
+│
+│   with data.aws_ecr_authorization_token.auth,
+│   on 02.ecr.tf line 5, in data "aws_ecr_authorization_token" "auth":
+│    5: data "aws_ecr_authorization_token" "auth" {}
+│
+│ The plugin encountered an error, and failed to respond to the plugin.(*GRPCProvider).ReadDataSource call. The plugin logs may contain more details.
+╵
+
+Stack trace from the terraform-provider-aws_v5.74.0_x5.exe plugin:
+
+panic: runtime error: index out of range [0] with length 0
+```
+
+This isn't an issue, though, because we don't actually need `data "aws_ecr_authorization_token" "auth" {}` for LocalStack. Additionally, the first provisioner definition for the `docker_push` resource isn't needed. Also, the ECR domain is different for LocalStack.
+
+To accommodate these changes, I created a separate file, `02.ecr.tf`, which I placed in the `devops/localstack` folder. I then created the following PowerShell script to orchestrate the LocalStack deployment. The script backs up all necessary files, such as the Terraform state and the original ECR definitions, makes the required swaps, runs the process, and then restores everything to its original condition:
+
+```powershell
+$ecrOriginal = ".\02.ecr.tf"
+$ecrLocalstack = ".\localstack\02.ecr.tf"
+$stateOriginal = ".\terraform.tfstate"
+$stateBackupOriginal = ".\terraform.tfstate.backup"
+$stateLocalstack = ".\localstack\terraform.tfstate"
+$stateBackupLocalstack = ".\localstack\terraform.tfstate.backup"
+$ecrBackup = ".\02.ecr.tf.bak"
+$stateBackup = ".\terraform.tfstate.bak"
+$stateBackupBackup = ".\terraform.tfstate.backup.bak"
+
+try {
+    Write-Output "Swapping ecr file for LocalStack deployment..."
+
+    Move-Item -Path $ecrOriginal -Destination $ecrBackup -Force
+    Copy-Item -Path $ecrLocalstack -Destination $ecrOriginal -Force
+    Copy-Item -Path $stateOriginal -Destination $stateBackup -Force
+    Copy-Item -Path $stateBackupOriginal -Destination $stateBackupBackup -Force
+
+    Write-Output "Deployment files swapped. Running Terraform commands now."
+
+    tflocal apply -auto-approve -var="account_id=000000000000" -var="is_localstack_deploy=true"
+} finally {
+    Write-Output "Restoring original files..."
+
+    Move-Item -Path $ecrBackup -Destination $ecrOriginal -Force
+    Move-Item -Path $stateBackup -Destination $stateOriginal -Force
+    Move-Item -Path $stateBackupBackup -Destination $stateBackupOriginal -Force
+
+    Write-Output "Files restored to their original state."
+}
+```
+
+Postman request issued agains `http://b3bc97d4.execute-api.localhost.localstack.cloud:4566/predict` returns the expected response.
 
 ## Summary
 
-IN PROGRESS
+This was the most fun I've ever had with cloud and DevOps-related work, and what surprised me the most was how smoothly everything ran. The biggest surprise was LocalStack. Why? Well, LocalStack runs on Docker, and I also defined a container repository in my Terraform definitions. I was concerned that LocalStack wouldn't handle this "Docker inside Docker" recursion, but it did - beautifully, as always. I think LocalStack will become a go-to tool in my workflow whenever I'm working with AWS.
