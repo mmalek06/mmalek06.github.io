@@ -153,14 +153,12 @@ class ProposalBuilder:
     def __init__(
             self,
             coco_file_path: str,
-            images_dir: str,
-            is_train: bool = True
+            images_dir: str
     ):
         with open(coco_file_path, "r") as f:
             self.coco_data = json.load(f)
 
         self.original_dataset_dir = images_dir
-        self.is_train = is_train
         self.image_data = [
             img
             for img in self.coco_data["images"]
