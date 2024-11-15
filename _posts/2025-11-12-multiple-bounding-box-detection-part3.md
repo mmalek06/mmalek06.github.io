@@ -19,6 +19,7 @@ In the previous posts I focused on preparing the training data:
 
 1. Train ResNet-backed feature extractor model.
 2. Experiment with different sampling strategies.
+3. Experiment with different loss functions.
 
 ## The code
 
@@ -70,9 +71,9 @@ class CrackDataset(Dataset):
         return iou_score, label
 ```
 
-The model itself is quite simple as well. The last layer of ResNet is `(fc): Linear(in_features=2048, out_features=1000, bias=True)`, so there's no need to flatten anything - I could pass the feature extractor output straight to the ReLU layer. 
+The model itself is quite simple as well. The last layer of ResNet is `(fc): Linear(in_features=2048, out_features=1000, bias=True)`, so there's no need to flatten anything - I could pass the feature extractor output straight to the ReLU layer. Note the `Sigmoid` activation at the end - I will talk about it briefly in the training loop section.
 
-At this stage, the feature extractor backbone network is intentionally not frozen. The goal here is to fine-tune the already performant network to the specific problem at hand. In the next post, this retrained network will be reused, this time in a frozen state.
+At this stage, the feature extractor backbone network is intentionally not frozen. The goal here is to fine-tune the already performant network to the specific problem at hand. In the next post, this retrained network will be reused, this time in a frozen state and a classifier not based on neural networks (an exciting but outdated technique!).
 
 ```python
 class Resnext50BasedClassifier(nn.Module):
@@ -100,7 +101,7 @@ class Resnext50BasedClassifier(nn.Module):
         return class_scores
 ```
 
-The next sample is slightly longer than the previous ones. Since I kept running the notebook multiple times, and since the data volume (proposals generated in the second part of this series) is quite big, it made sense to cache the image paths to speed up the overall process. Also, you'll notice that I limited the number of negative samples. I did it to speed up the training. If I allowed the network to go through the whole dataset it was very slow on my RTX3060 graphics card. Apart from that <b>I'm not aiming to train the best possible bounding box detection model</b>, only to learn this particular architecture and have some fun with it. If this was a real world project obviously I would be much more thorough and strict(then again, I would probably have something better than RTX3060 on board ;) ).
+The next sample is slightly longer than the previous ones. Since I kept running the notebook multiple times, and since the data volume (proposals generated in the second part of this series) is quite big, it made sense to cache the image paths to speed up the file discovery process. Also, you'll notice that I limited the number of negative samples. I did it to speed up the training. When I allowed the network to go through the whole dataset it was very slow on my RTX3060 graphics card. Apart from that <b>I'm not aiming to train the best possible bounding box detection model</b>, only to learn this particular architecture and have some fun with it. If this was a real world project obviously I would be much more thorough and strict(then again, I would probably have something better than RTX3060 on board ;) ).
 
 ```python
 def parse_image_metadata(image_name: str):
@@ -170,7 +171,13 @@ def get_loaders() -> tuple[DataLoader, DataLoader]:
     return train_dataloader, valid_dataloader
 ```
 
-And finally, below you'll find the training loop. Its code will change slightly from notebook to notebook, as I experiment with sampling and weighing, so I'll just put it here without any further comment, as its code is very basic.
+And finally, below you'll find the training loop. It's easy to spot that I decided to use the `BCELoss` instead of the `BCEWithLogitsLoss` (that's why I'm using the `Sigmoid` activation in the classifier module). I chose one over the other because of a few factors:
+
+- I didn't need to use raw logits anywhere else.
+- It's easier on the testing phase - you just input the data into the model without the need to apply sigmoid on prediction results to obtain class probabilities.
+- Vanishing gradients are not an issue here.
+
+I'm gathering the history entries in order to be able to create pretty plots after the training is done.
 
 ```python
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -258,6 +265,31 @@ for epoch in range(NUM_EPOCHS):
 
 When the model is done training, it's time for testing. First let's generate the classification report to see how well it does with the two categories it was supposed to distinguish.
 
+<pre>
+              precision    recall  f1-score   support
+
+    No crack       0.86      0.87      0.86     37111
+       Crack       0.67      0.65      0.66     15337
+
+    accuracy                           0.80     52448
+   macro avg       0.76      0.76      0.76     52448
+weighted avg       0.80      0.80      0.80     52448
+</pre>
+
+The model is not very good - better than random chance in crack detection, but still far from stellar. I didn't expect great results because of the nature of the problem I chose. To explain, I need to get a bit metaphysical here.
+
+The original R-CNN network was trained on images of people, cars, animals - objects we see daily. This version, however, was retrained on a dataset full of cracks, and it possesses a trait the original dataset lacked: self-resemblance.
+
+What I mean by this is that if you take a small region of an image containing part of a crack, it still looks like a crack on its own. In contrast, if you take a region of an image of a person - say, a leg, half a face, or part of a torso - it may have some human-like traits, but it doesn't resemble a complete human.
+
+My hypothesis is that for problems characterized by this self-resemblance trait, precision and recall will tend to underperform. If I'm mistaken, so be it - I'm here to learn and uncovering how the described problem can be solved better will be a great adventure.
+
+But coming back to the classification report: the model performs significantly better at identifying non-crack regions compared to crack regions. This disparity is evident from the higher precision, recall, and F1-score for the "No Crack" class. The "Crack" class shows lower values across all metrics, indicating challenges in accurately identifying cracks. To clearly interpret the numbers: 
+
+- When the model predicts a crack, it is correct 67% of the time.
+- Recall value shows that the model correctly identified 65% of all actual cracks in the dataset. The remaining 35% of true cracks were missed (false negatives).
+
+In the following steps I will try to find a way to bump up those numbers, at least slightly. When I obtain a model that does better than this one, I'll move on to describing the final steps.
 
 ## to use with next notebooks
 
