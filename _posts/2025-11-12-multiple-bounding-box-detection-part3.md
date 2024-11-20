@@ -356,7 +356,87 @@ The recall dropped even more for the "No crack" class, but it improved for the "
        Crack       0.73      0.75      0.74     26757
 </pre>
 
-Now the results are more balanced across classes, which might be good in case we were striving for balance. That's not the case for this problem.
+Now the results are more balanced across classes, which might be good in case we were striving for balance. That's not the case for this problem, therefore so far the best model obtained is the one that reached .85 recall value. Before I finish this blog post there's one strategy left to try, and it's using a different loss function - the `sigmoid_focal_loss` from the `torchvision.ops` module. The `BCELoss` is straightforward (the below is its formula with the default mean reduction):
 
-TODO - opisać focal loss
-TODO - zbadać aktywacje
+$$\begin{aligned}
+\text{BCE Loss} = - \frac{1}{N} \sum_{i=1}^{N} \left[ y_i \cdot \log(\hat{y}_i) + (1 - y_i) \cdot \log(1 - \hat{y}_i) \right]
+\end{aligned}$$
+
+It penalizes the incorrect predictions based on their confidence, treating all misclassifications equally. It's good for balanced datasets, and even for the imbalanced ones (like the one I'm using) a lot can be done to improve its workings with class weights. However, there's another loss function which is smarter: sigmoid focal loss function.
+
+$$\begin{aligned}
+\text{Focal Loss} = - \frac{1}{N} \sum_{i=1}^{N} \alpha_t \cdot (1 - p_t)^\gamma \cdot CE Loss_i
+\end{aligned}$$
+
+Where $p_t$ is defined as (and $𝑝=\sigma(inputs)$ - i.e., the sigmoid of the raw model outputs):
+
+$$\begin{aligned}
+p_t = 
+\begin{cases} 
+p & \text{if } y = 1 \\
+1 - p & \text{if } y = 0
+\end{cases}
+\end{aligned}$$
+
+The $(1 - p_t)^\gamma$ term is what [they call](https://arxiv.org/pdf/1708.02002) (page 3) a modulating factor. To use the author's original words: "When an example is misclassified and $p_t$ is small, the modulating factor is near 1 and the loss is unaffected. As $p_t \rightarrow 1$, the factor goes to $0$ and the loss for well-classified
+examples is down-weighted." - the loss contribution from easy examples is reduced.
+
+As for the $\alpha_t$ - it is the weighting factor for class imbalance:
+
+$$\begin{aligned}
+\alpha_t = 
+\begin{cases} 
+\alpha & \text{if } y = 1 \\
+1 - \alpha & \text{if } y = 0
+\end{cases}
+\end{aligned}$$
+
+Translating $\alpha_t$ to the code that you'll find in pytorch docs for the `sigmoid_focal_loss` function, it's this statement:
+
+```python
+alpha_t = alpha * targets + (1 - alpha) * (1 - targets)
+```
+
+Translating it back to mathematical terms (where's the if-else, goddammit?!), when targets == 1:
+
+$$\begin{aligned}
+(1 - targets) = 0
+\end{aligned}$$
+$$\begin{aligned}
+\alpha_t = \alpha \cdot 1 + (1 - \alpha) \cdot 0 = \alpha
+\end{aligned}$$
+
+And when targets == 0:
+
+$$\begin{aligned}
+(1 - targets) = 1
+\end{aligned}$$
+$$\begin{aligned}
+\alpha_t = \alpha \cdot 0 + (1 - \alpha) \cdot 1 = 1 - \alpha
+\end{aligned}$$
+
+To give an example using numbers: 
+
+$$\begin{aligned}
+\mathbf{\alpha} = \alpha \cdot \begin{bmatrix}
+1 \\
+0
+\end{bmatrix} +
+(1 - 0.25) * (1 - \begin{bmatrix}
+1 \\
+0
+\end{bmatrix}) = \begin{bmatrix}
+0.25 \\
+0.75
+\end{bmatrix}
+\end{aligned}$$
+
+I don't know about you, but this was very counterintuitive for me at first glance. The `sigmoid_focal_loss` function was supposed to emphasize the loss effect of the underrepresented class, and that numerical example clearly shows that the overrepresented class gets a higher weight.
+
+Although I couldn't find anything in the cited work and ChatGPT started talking nonsense, I think I eventually came up with the right intuition. The key lies in relating the $\alpha_t$ to the modulating factor. The later would be very small for very easy examples and very big for hard examples. In general, this is something good but could result in underrepresented samples dominating the loss too much, and therefore a small adjustment is applied. I really hope I got this one right :)
+
+With that explained let's look at the classification report for a model trained with the `sigmoid_focal_loss` function (btw. the model definition had to be changed slightly - since the loss function itself applies the `torch.sigmoid` operation, there was no need to use the `Sigmoid` activation directly in the model - because of that it now returns raw logits):
+
+<pre>
+
+</pre>
