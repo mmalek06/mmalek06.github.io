@@ -73,7 +73,7 @@ class CrackDataset(Dataset):
 
 The model itself is quite simple as well. The last layer of ResNet is `(fc): Linear(in_features=2048, out_features=1000, bias=True)`, so there's no need to flatten anything - I could pass the feature extractor output straight to the ReLU layer. Note the `Sigmoid` activation at the end - I will talk about it briefly in the training loop section.
 
-At this stage, the feature extractor backbone network is intentionally not frozen. The goal here is to fine-tune the already performant network to the specific problem at hand. In the next post, this retrained network will be reused, this time in a frozen state and a classifier not based on neural networks (an exciting but outdated technique!).
+At this stage, the feature extractor backbone network is intentionally not frozen. The goal here is to fine-tune the already performant network to the specific problem at hand. In the next post, this retrained network will be reused, this time in a frozen state and a classifier not based on neural networks (an outdated but exciting technique!).
 
 ```python
 class Resnext50BasedClassifier(nn.Module):
@@ -165,8 +165,8 @@ def get_loaders() -> tuple[DataLoader, DataLoader]:
 
     train_dataset = CrackDataset(train_images_dir, train_images_paths, is_train=True)
     valid_dataset = CrackDataset(valid_images_dir, valid_images_paths, is_train=False)
-    train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE)
-    valid_dataloader = DataLoader(valid_dataset, batch_size=BATCH_SIZE, shuffle=True)
+    train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
+    valid_dataloader = DataLoader(valid_dataset, batch_size=BATCH_SIZE)
 
     return train_dataloader, valid_dataloader
 ```
@@ -278,7 +278,7 @@ weighted avg       0.80      0.80      0.80     52448
 
 The model is not very good - better than random chance in crack detection, but still far from stellar. I didn't expect great results because of the nature of the problem I chose. To explain, I need to get a bit metaphysical here.
 
-The original R-CNN network was trained on images of people, cars, animals - objects we see daily. This version, however, was retrained on a dataset full of cracks, and it possesses a trait the original dataset lacked: self-resemblance.
+The original R-CNN network was trained on images of people, cars, animals - objects we see daily. This version, however, was retrained on a dataset full of cracks, and this dataset possesses a trait the original one lacked: self-resemblance.
 
 What I mean by this is that if you take a small region of an image containing part of a crack, it still looks like a crack on its own. In contrast, if you take a region of an image of a person - say, a leg, half a face, or part of a torso - it may have some human-like traits, but it doesn't resemble a complete human.
 
@@ -289,8 +289,74 @@ But coming back to the classification report: the model performs significantly b
 - When the model predicts a crack, it is correct 67% of the time.
 - Recall value shows that the model correctly identified 65% of all actual cracks in the dataset. The remaining 35% of true cracks were missed (false negatives).
 
-In the following steps I will try to find a way to bump up those numbers, at least slightly. When I obtain a model that does better than this one, I'll move on to describing the final steps.
+For this particular problem it would be best if the recall value for the "Crack" class was higher. Translating to a real-world scenario: imagine a production line in a tile factory with cameras above it. When a new tile comes it, the cameras take photos of it. They are sent to our crack detection system to make sure the company doesn't sell damaged products. What it means is that we want to detect the maximum number of damaged tiles, even at the expense of reporting some false positives - that's what optimizing for recall will do. In the following steps I will try to find a way to bump up that numbers, at least slightly. When I obtain a model that does better than this one, I'll move on to describing the final steps.
 
-## to use with next notebooks
+For the next iteration of my solution I used class weighing. For that I had to add this method to the dataset class:
 
-The most important part is found in the last lines of the `get_loaders` function. `class_weights` is a dictionary where each class label maps to its calculated weight: `num_samples / count`. This weighting inversely scales with the frequency of each class, meaning classes with fewer examples get higher weights. `sample_weights` is a list that maps the weight for each image's label. Images from underrepresented classes get higher weights, making them more likely to be chosen. `WeightedRandomSampler` uses these weights to sample images with replacement, ensuring that each mini-batch contains a balanced representation across classes. This is particularly useful for imbalanced datasets because it forces the model to train on all classes equally(-ish), improving performance on minority classes. Or is it...? The thing is that I've set the `replacement` argument to `True`. What that means is that each sample can potentially be selected multiple times, and this in turn may lead to overfitting. Whether or not that will happen will be visible after the training is completed. There are also two alternative approaches I used for sampling and weighing and I'll describe those later in this post.
+```python
+    def get_labels(self) -> list[int]:
+        """Quickly extract labels without loading images or applying transformations - for the sampler."""
+        return [CrackDataset.parse_filename(f)[1] for f in self.image_files]
+```
+
+...and this is the code I added to the `get_loaders` function:
+
+```python 
+    train_dataset = CrackDataset(train_images_dir, train_images_paths, is_train=True)
+    valid_dataset = CrackDataset(valid_images_dir, valid_images_paths, is_train=False)
+    labels = train_dataset.get_labels()
+    class_weights = {0: 1, 1: 2}
+    sample_weights = [class_weights[label] for label in labels]
+    train_sampler = WeightedRandomSampler(weights=sample_weights, num_samples=len(sample_weights), replacement=True)
+    train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, sampler=train_sampler)
+    valid_dataloader = DataLoader(valid_dataset, batch_size=BATCH_SIZE)
+```
+
+As you can see, I'm adding more weight to the "crack" class. With conjunction with the `replacement=True` parameter this means that the "crack" class instances will be selected more often and that a single instance can be selected more than once in an epoch. Assigning a higher weight to an underrepresented class is a common way of improving models performance, let's see what it did for this particular problem.
+
+<pre>
+              precision    recall  f1-score   support
+
+    No crack       0.89      0.78      0.83     37111
+       Crack       0.58      0.76      0.66     15337
+</pre>
+
+Those changes resulted in an interesting improvement to the recall value. It seems that now the model can detect more cracks! However, its precision dropped. Effectively, or at least judging by the f1-score, we're almost in the same place for the positive class detection but the performance dropped slightly for the negative class (0.78 VS 0.87 recall value in the previous iteration). However, as stated in the previous paragraph, we're optimizing for the recall, so this direction is the right one. Let's see if the upcoming changes will bump up the precision metric value for the positive class while keeping recall at the same (decent) level.
+
+Earlier, I mentioned the self-resemblance problem. I don't have a clear solution for it when using a pretrained network like the ResNet I'm working with in this post. However, I decided to experiment with lowering the IoU threshold as a potential workaround.
+
+My rationale was that the model's recall is suboptimal because it often gets confused by images that resemble cracks but are labeled as the negative class. Since self-resemblance is present independently of scale, smaller image patches showing parts of cracks might still confuse the model. However, I hope this confusion will be less pronounced, making the lower IoU threshold beneficial.
+
+That said, there's a trade-off. This adjustment could impair the bounding box detector's ability to produce well-fitting bounding boxes. The original R-CNN paper justifies the choice of a .5 IoU threshold for this reason. If this happens, I'll revisit the approach and explore other ways to address the self-resemblance problem while returning to a higher IoU threshold.
+
+These are the classification results for a model trained with a lowered IoU threshold:
+
+<pre>
+              precision    recall  f1-score   support
+
+    No crack       0.86      0.75      0.80     39615
+       Crack       0.69      0.82      0.75     26757
+</pre>
+
+It's clear the it didn't only improve the recall but also precision at the expense of lowering the negative class stats. Now let's look what happens when a higher weight is assigned to the positive class:
+
+<pre>
+              precision    recall  f1-score   support
+
+    No crack       0.88      0.71      0.79     39615
+       Crack       0.67      0.85      0.75     26757
+</pre>
+
+The recall dropped even more for the "No crack" class, but it improved for the "Crack" class - that's good. At this point I decided to train one more model to see what effect would sampling without replacement have on the model's performance:
+
+<pre>
+              precision    recall  f1-score   support
+
+    No crack       0.83      0.82      0.82     39615
+       Crack       0.73      0.75      0.74     26757
+</pre>
+
+Now the results are more balanced across classes, which might be good in case we were striving for balance. That's not the case for this problem.
+
+TODO - opisać focal loss
+TODO - zbadać aktywacje
