@@ -3,7 +3,7 @@ layout: post
 title: "Multiple bounding box detection, Part 3 - fine tuning the backbone network"
 date: 2024-11-02 00:00:00 -0000
 categories: Python
-tags: ["python", "pytorch", "transfer learning", "image vision"]
+tags: ["python", "pytorch", "transfer learning", "image vision", "math"]
 ---
 
 # Multiple bounding box detection, Part 3 - fine tuning the backbone network
@@ -435,8 +435,24 @@ I don't know about you, but this was very counterintuitive for me at first glanc
 
 Although I couldn't find anything in the cited work and ChatGPT started talking nonsense, I think I eventually came up with the right intuition. The key lies in relating the $\alpha_t$ to the modulating factor. The later would be very small for very easy examples and very big for hard examples. In general, this is something good but could result in underrepresented samples dominating the loss too much, and therefore a small adjustment is applied. I really hope I got this one right :)
 
-With that explained let's look at the classification report for a model trained with the `sigmoid_focal_loss` function (btw. the model definition had to be changed slightly - since the loss function itself applies the `torch.sigmoid` operation, there was no need to use the `Sigmoid` activation directly in the model - because of that it now returns raw logits):
+With that explained let's look at the classification report for a model trained with the `sigmoid_focal_loss` function with $\alpha$ and $\gamma$ parameters set with the default values (btw. the model definition had to be changed slightly - since the loss function itself applies the `torch.sigmoid` operation, there was no need to use the `Sigmoid` activation directly in the model - because of that it now returns raw logits):
 
 <pre>
+              precision    recall  f1-score   support
 
+    No crack       0.77      0.98      0.86     37111
+       Crack       0.83      0.28      0.42     15337
 </pre>
+
+<b>Side note</b>: you might have noticed the support value changes #TODO - explain
+
+That's a very bad result, isn't it? The model is now able to find only 28% of all the crack images. I did a few runs with different $\alpha$ and $\gamma$ values, but eventually I gave up. Nothing I did could make the model's recall go back to the 70-80% level obtained previously. However, on one of my last tries I set $\alpha = -1$. As visible in the loss function source code, with a value below zero $\alpha$ is ignored and the loss function becomes an interaction between the modulating factor and the cross entropy term. Guess what? It actually helped in maximizing the recall at the expense of precision going down. 
+
+<pre>
+              precision    recall  f1-score   support
+
+    No crack       0.91      0.63      0.75     39615
+       Crack       0.62      0.90      0.74     26757
+</pre>
+
+# TODO - podczas walidacji różne thresholdy dla sigmoida

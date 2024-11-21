@@ -8,7 +8,9 @@ tags: ["python", "image vision", "opencv", "flood fill"]
 
 # Multiple bounding box detection, Part 1 - data preparation
 
-This post is the first in a series that I've long planned to write. At the time of writing, I don't know how many parts there will be or their specific topics, but what I can be sure of is that I will attempt to implement major components of R-CNN, Fast(er) R-CNN, and Mask R-CNN.
+This post is the first in a series that I've long planned to write. At the time of writing, I don't know how many parts there will be or their specific topics, but what I can be sure of is that I will attempt to implement major components of R-CNN, Fast(er) R-CNN, and Mask R-CNN. 
+
+One important remark - this is a learning experience for me, this whole blog is. I suppose that I won't be able to maximize the performance of my models, but that's not the goal of this series. I'm saying this in the beginning, just so that remember it after I come back to these posts after long time, or if someone wonders "why didn't he use technique X - that would make the accuracy skyrocket over 100%" ;)
 
 The initial idea was to train my networks using [this kaggle dataset](https://www.kaggle.com/datasets/lakshaymiddha/crack-segmentation-dataset), and then test them on [something else](https://www.kaggle.com/datasets/dataclusterlabs/cracked-screen-dataset). However, given how different the other dataset is, I may instead train on a subset of the first one and test on the remaining portion. We'll see how it goes :)
 
