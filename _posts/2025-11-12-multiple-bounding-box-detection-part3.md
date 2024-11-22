@@ -437,14 +437,18 @@ Although I couldn't find anything in the cited work and ChatGPT started talking 
 
 With that explained let's look at the classification report for a model trained with the `sigmoid_focal_loss` function with $\alpha$ and $\gamma$ parameters set with the default values (btw. the model definition had to be changed slightly - since the loss function itself applies the `torch.sigmoid` operation, there was no need to use the `Sigmoid` activation directly in the model - because of that it now returns raw logits):
 
+```python
+outputs = model(images).squeeze()
+probabilities = torch.sigmoid(outputs)
+predictions = (probabilities >= .5).float()
+```
+
 <pre>
               precision    recall  f1-score   support
 
     No crack       0.77      0.98      0.86     37111
        Crack       0.83      0.28      0.42     15337
 </pre>
-
-<b>Side note</b>: you might have noticed the support value changes #TODO - explain
 
 That's a very bad result, isn't it? The model is now able to find only 28% of all the crack images. I did a few runs with different $\alpha$ and $\gamma$ values, but eventually I gave up. Nothing I did could make the model's recall go back to the 70-80% level obtained previously. However, on one of my last tries I set $\alpha = -1$. As visible in the loss function source code, with a value below zero $\alpha$ is ignored and the loss function becomes an interaction between the modulating factor and the cross entropy term. Guess what? It actually helped in maximizing the recall at the expense of precision going down. 
 
@@ -454,5 +458,7 @@ That's a very bad result, isn't it? The model is now able to find only 28% of al
     No crack       0.91      0.63      0.75     39615
        Crack       0.62      0.90      0.74     26757
 </pre>
+
+<b>Side note</b>: you might have noticed the support value changes between the two reports. It happened because the IoU threshold was lowered. The specific reason for why the number of "Crack" instances grew is that with a lower threshold, more samples are considered cracks, which is kind of obvious. However, the number of "No crack" instances also grew slightly, so why is that? Look at the `filter_and_sort_images` function. It takes 10 images from each group of IoU ranges. Let's consider the top group - $[.35, .5)$. It might have happened that there was a smaller (than 10) number of images in this group, but now these images are considered to be members of the positive category. However, in the lower groups there were usually 10 images. So lowering of the IoU threshold had a side effect of including more "No crack" images because there was just more images without cracks in the lower IoU groups.
 
 # TODO - podczas walidacji różne thresholdy dla sigmoida
