@@ -334,20 +334,11 @@ These are the classification results for a model trained with a lowered IoU thre
 <pre>
               precision    recall  f1-score   support
 
-    No crack       0.86      0.75      0.80     39615
-       Crack       0.69      0.82      0.75     26757
+    No crack       0.84      0.78      0.81     39615
+       Crack       0.70      0.78      0.74     26757
 </pre>
 
-It's clear the it didn't only improve the recall but also precision at the expense of lowering the negative class stats. Now let's look what happens when a higher weight is assigned to the positive class:
-
-<pre>
-              precision    recall  f1-score   support
-
-    No crack       0.88      0.71      0.79     39615
-       Crack       0.67      0.85      0.75     26757
-</pre>
-
-The recall dropped even more for the "No crack" class, but it improved for the "Crack" class - that's good. At this point I decided to train one more model to see what effect would sampling without replacement have on the model's performance:
+At this point I decided to train one more model to see what effect would sampling without replacement have on the model's performance:
 
 <pre>
               precision    recall  f1-score   support
@@ -356,13 +347,15 @@ The recall dropped even more for the "No crack" class, but it improved for the "
        Crack       0.73      0.75      0.74     26757
 </pre>
 
-Now the results are more balanced across classes, which might be good in case we were striving for balance. That's not the case for this problem, therefore so far the best model obtained is the one that reached .85 recall value. Before I finish this blog post there's one strategy left to try, and it's using a different loss function - the `sigmoid_focal_loss` from the `torchvision.ops` module. The `BCELoss` is straightforward (the below is its formula with the default mean reduction):
+The recall dropped slightly but the precision went up. Depending on the trade-offs that the virtual client is willing to accept I could have picked one of these models and move to the next topic. However, after training these models I thought about using a different loss function - the `sigmoid_focal_loss` from the `torchvision.ops` module. 
+
+The `BCELoss` is straightforward (the below is its formula with the default mean reduction):
 
 $$\begin{aligned}
 \text{BCE Loss} = - \frac{1}{N} \sum_{i=1}^{N} \left[ y_i \cdot \log(\hat{y}_i) + (1 - y_i) \cdot \log(1 - \hat{y}_i) \right]
 \end{aligned}$$
 
-It penalizes the incorrect predictions based on their confidence, treating all misclassifications equally. It's good for balanced datasets, and even for the imbalanced ones (like the one I'm using) a lot can be done to improve its workings with class weights. However, there's another loss function which is smarter: sigmoid focal loss function.
+It penalizes the incorrect predictions based on their confidence, treating all misclassifications equally. It's good for balanced datasets, and even for the imbalanced ones (like the one I'm using) a lot can be done to improve its workings with class weights (as you saw). However, there's another loss function which is smarter: sigmoid focal loss function. Here's its formula when mean reduction is used:
 
 $$\begin{aligned}
 \text{Focal Loss} = - \frac{1}{N} \sum_{i=1}^{N} \alpha_t \cdot (1 - p_t)^\gamma \cdot CE Loss_i
@@ -455,10 +448,23 @@ That's a very bad result, isn't it? The model is now able to find only 28% of al
 <pre>
               precision    recall  f1-score   support
 
-    No crack       0.91      0.63      0.75     39615
-       Crack       0.62      0.90      0.74     26757
+    No crack       0.84      0.81      0.82     39615
+       Crack       0.73      0.77      0.75     26757
 </pre>
 
 <b>Side note</b>: you might have noticed the support value changes between the two reports. It happened because the IoU threshold was lowered. The specific reason for why the number of "Crack" instances grew is that with a lower threshold, more samples are considered cracks, which is kind of obvious. However, the number of "No crack" instances also grew slightly, so why is that? Look at the `filter_and_sort_images` function. It takes 10 images from each group of IoU ranges. Let's consider the top group - $[.35, .5)$. It might have happened that there was a smaller (than 10) number of images in this group, but now these images are considered to be members of the positive category. However, in the lower groups there were usually 10 images. So lowering of the IoU threshold had a side effect of including more "No crack" images because there was just more images without cracks in the lower IoU groups.
 
-# TODO - podczas walidacji różne thresholdy dla sigmoida
+Now we end up with two decent models - one with 70% / 78% precision / recall level and the last one that got 73% / 77% precision / recall level for the positice class. 
+
+<b>Another side note:</b> I retrained both variations to make sure the numbers are not obtained by chance, and, as you might have guessed - they're not. That's the thing with transfer learning. The initial model is already pretty good, so what changes most from epoch to epoch are the added layers. However, since they rely heavily on the features extracted earlier, on each training run they will converge to almost the same numbers.
+
+I also wanted to share the accuracy and loss plots and comment on them. On the left you'll see the plots for the first model (the one with 70% / 78% precision / recall values), and on the right ones for the last one:
+
+<div style="height: 400px">
+    <img style="width: 360px; float: left" src="https://mmalek06.github.io/images/crack-detection-acc-val-1.png" />
+    <img style="width: 360px; float: right" src="https://mmalek06.github.io/images/crack-detection-acc-val-2.png" />
+</div>
+
+## Summary and next steps
+
+Well, this was fun, especially the loss function experimentation. What surprised me was that despite being designed for larger problems (at least that's the info I found on the internet), it worked well for this one. It surprised me, because I half-expected that it would either not improve the results or even make them slightly worse. That's very often the case when more complex mechanisms end up worsening the results as compared to the simple ones. I think I made a short remark at the beginning of this series - I said that I won't strive for perfection. That's the reason I stopped where I stopped. The results are still far from perfect, and maybe if I used a more modern backbone network architecture they would improve, but like I said - it's not my goal
