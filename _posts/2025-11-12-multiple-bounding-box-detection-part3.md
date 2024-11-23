@@ -395,6 +395,7 @@ Translating it back to mathematical terms (where's the if-else, goddammit?!), wh
 $$\begin{aligned}
 (1 - targets) = 0
 \end{aligned}$$
+
 $$\begin{aligned}
 \alpha_t = \alpha \cdot 1 + (1 - \alpha) \cdot 0 = \alpha
 \end{aligned}$$
@@ -404,6 +405,7 @@ And when targets == 0:
 $$\begin{aligned}
 (1 - targets) = 1
 \end{aligned}$$
+
 $$\begin{aligned}
 \alpha_t = \alpha \cdot 0 + (1 - \alpha) \cdot 1 = 1 - \alpha
 \end{aligned}$$
@@ -464,6 +466,8 @@ I also wanted to share the accuracy and loss plots and comment on them. On the l
     <img style="width: 360px; float: left" src="https://mmalek06.github.io/images/crack-detection-acc-val-1.png" />
     <img style="width: 360px; float: right" src="https://mmalek06.github.io/images/crack-detection-acc-val-2.png" />
 </div>
+
+The specific numbers are not as interesting as are the shapes of the curves. The first variation shows some signs of overtraining (see how far the curves are from one another?), while for the second one they are smaller. That's also the reason I will use the second one in the next steps.
 
 ## Summary and next steps
 
