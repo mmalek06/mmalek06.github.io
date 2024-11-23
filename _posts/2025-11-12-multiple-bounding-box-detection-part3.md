@@ -467,8 +467,12 @@ I also wanted to share the accuracy and loss plots and comment on them. On the l
     <img style="width: 360px; float: right" src="https://mmalek06.github.io/images/crack-detection-acc-val-2.png" />
 </div>
 
-The specific numbers are not as interesting as are the shapes of the curves. The first variation shows some signs of overtraining (see how far the curves are from one another?), while for the second one they are smaller. That's also the reason I will use the second one in the next steps.
+The specific numbers are less interesting than the shapes of the curves. In the first variation, there are clear signs of overtraining - notice how far apart the curves are from one another. In contrast, for the second variation, the gap between the curves is much smaller. This is the second reason why I've decided to use the second variation in the next steps.
 
 ## Summary and next steps
 
-Well, this was fun, especially the loss function experimentation. What surprised me was that despite being designed for larger problems (at least that's the info I found on the internet), it worked well for this one. It surprised me, because I half-expected that it would either not improve the results or even make them slightly worse. That's very often the case when more complex mechanisms end up worsening the results as compared to the simple ones. I think I made a short remark at the beginning of this series - I said that I won't strive for perfection. That's the reason I stopped where I stopped. The results are still far from perfect, and maybe if I used a more modern backbone network architecture they would improve, but like I said - it's not my goal
+This project was a lot of fun, especially the experimentation with the loss function. What surprised me the most was how well it worked, despite being designed for larger problems - at least, according to what I found on the internet. I half-expected it wouldn't improve the results or might even make them slightly worse. This is a common outcome when more complex mechanisms end up underperforming compared to simpler ones.
+
+As I mentioned at the beginning of this series, I'm not striving for perfection. That's why I decided to stop where I did. The results are far from perfect, and perhaps using a more modern backbone network architecture could improve them. However, as I said earlier, perfection isn't the goal here.
+
+Next up: I'll drop the classifier and try to perform the second step described in the R-CNN work which is training an SVM classifier.
