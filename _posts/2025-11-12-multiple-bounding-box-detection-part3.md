@@ -475,4 +475,4 @@ This project was a lot of fun, especially the experimentation with the loss func
 
 As I mentioned at the beginning of this series, I'm not striving for perfection. That's why I decided to stop where I did. The results are far from perfect, and perhaps using a more modern backbone network architecture could improve them. However, as I said earlier, perfection isn't the goal here.
 
-Next up: I'll drop the classifier and try to perform the second step described in the R-CNN work which is training an SVM classifier.
+Next up: I'll drop the neural net classifier and try to perform the second step described in the R-CNN work which is training an SVM classifier.
