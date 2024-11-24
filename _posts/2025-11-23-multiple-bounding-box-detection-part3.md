@@ -358,7 +358,7 @@ $$\begin{aligned}
 It penalizes the incorrect predictions based on their confidence, treating all misclassifications equally. It's good for balanced datasets, and even for the imbalanced ones (like the one I'm using) a lot can be done to improve its workings with class weights (as you saw). However, there's another loss function which is smarter: sigmoid focal loss function. Here's its formula when mean reduction is used:
 
 $$\begin{aligned}
-\text{Focal Loss} = - \frac{1}{N} \sum_{i=1}^{N} \alpha_t \cdot (1 - p_t)^\gamma \cdot CE Loss_i
+\text{Focal Loss} = - \frac{1}{N} \sum_{i=1}^{N} \alpha_t \cdot (1 - p_t)^\gamma \cdot BCE Loss_i
 \end{aligned}$$
 
 Where $p_t$ is defined as (and $𝑝=\sigma(inputs)$ - i.e., the sigmoid of the raw model outputs):
@@ -371,10 +371,10 @@ p & \text{if } y = 1 \\
 \end{cases}
 \end{aligned}$$
 
-The $(1 - p_t)^\gamma$ term is what [they call](https://arxiv.org/pdf/1708.02002) (page 3) a modulating factor. To use the author's original words: "When an example is misclassified and $p_t$ is small, the modulating factor is near 1 and the loss is unaffected. As $p_t \rightarrow 1$, the factor goes to $0$ and the loss for well-classified
+The $$(1 - p_t)^\gamma$$ term is what [they call](https://arxiv.org/pdf/1708.02002) (page 3) a modulating factor. To use the author's original words: "When an example is misclassified and $$p_t$$ is small, the modulating factor is near 1 and the loss is unaffected. As $$p_t \rightarrow 1$$, the factor goes to $$0$$ and the loss for well-classified
 examples is down-weighted." - the loss contribution from easy examples is reduced.
 
-As for the $\alpha_t$ - it is the weighting factor for class imbalance:
+As for the $$\alpha_t$$ - it is the weighting factor for class imbalance:
 
 $$\begin{aligned}
 \alpha_t = 
@@ -384,7 +384,7 @@ $$\begin{aligned}
 \end{cases}
 \end{aligned}$$
 
-Translating $\alpha_t$ to the code that you'll find in pytorch docs for the `sigmoid_focal_loss` function, it's this statement:
+Translating $$\alpha_t$$ to the code that you'll find in pytorch docs for the `sigmoid_focal_loss` function, it's this statement:
 
 ```python
 alpha_t = alpha * targets + (1 - alpha) * (1 - targets)
@@ -428,9 +428,9 @@ $$\begin{aligned}
 
 I don't know about you, but this was very counterintuitive for me at first glance. The `sigmoid_focal_loss` function was supposed to emphasize the loss effect of the underrepresented class, and that numerical example clearly shows that the overrepresented class gets a higher weight.
 
-Although I couldn't find anything in the cited work and ChatGPT started talking nonsense, I think I eventually came up with the right intuition. The key lies in relating the $\alpha_t$ to the modulating factor. The later would be very small for very easy examples and very big for hard examples. In general, this is something good but could result in underrepresented samples dominating the loss too much, and therefore a small adjustment is applied. I really hope I got this one right :)
+Although I couldn't find anything in the cited work and ChatGPT started talking nonsense, I think I eventually came up with the right intuition. The key lies in relating the $$\alpha_t$$ to the modulating factor. The later would be very small for very easy examples and very big for hard examples. In general, this is something good but could result in underrepresented samples dominating the loss too much, and therefore a small adjustment is applied. I really hope I got this one right :)
 
-With that explained let's look at the classification report for a model trained with the `sigmoid_focal_loss` function with $\alpha$ and $\gamma$ parameters set with the default values (btw. the model definition had to be changed slightly - since the loss function itself applies the `torch.sigmoid` operation, there was no need to use the `Sigmoid` activation directly in the model - because of that it now returns raw logits):
+With that explained let's look at the classification report for a model trained with the `sigmoid_focal_loss` function with $$\alpha$$ and $$\gamma$$ parameters set with the default values (btw. the model definition had to be changed slightly - since the loss function itself applies the `torch.sigmoid` operation, there was no need to use the `Sigmoid` activation directly in the model - because of that it now returns raw logits):
 
 ```python
 outputs = model(images).squeeze()
@@ -445,7 +445,7 @@ predictions = (probabilities >= .5).float()
        Crack       0.83      0.28      0.42     15337
 </pre>
 
-That's a very bad result, isn't it? The model is now able to find only 28% of all the crack images. I did a few runs with different $\alpha$ and $\gamma$ values, but eventually I gave up. Nothing I did could make the model's recall go back to the 70-80% level obtained previously. However, on one of my last tries I set $\alpha = -1$. As visible in the loss function source code, with a value below zero $\alpha$ is ignored and the loss function becomes an interaction between the modulating factor and the cross entropy term. Guess what? It actually helped in maximizing the recall at the expense of precision going down. 
+That's a very bad result, isn't it? The model is now able to find only 28% of all the crack images. I did a few runs with different $$\alpha$$ and $$\gamma$$ values, but eventually I gave up. Nothing I did could make the model's recall go back to the 70-80% level obtained previously. However, on one of my last tries I set $$\alpha = -1$$. As visible in the loss function source code, with a value below zero $$\alpha$$ is ignored and the loss function becomes an interaction between the modulating factor and the cross entropy term. Guess what? It actually helped in maximizing the recall at the expense of precision going down. 
 
 <pre>
               precision    recall  f1-score   support
@@ -454,7 +454,7 @@ That's a very bad result, isn't it? The model is now able to find only 28% of al
        Crack       0.73      0.77      0.75     26757
 </pre>
 
-<b>Side note</b>: you might have noticed the support value changes between the two reports. It happened because the IoU threshold was lowered. The specific reason for why the number of "Crack" instances grew is that with a lower threshold, more samples are considered cracks, which is kind of obvious. However, the number of "No crack" instances also grew slightly, so why is that? Look at the `filter_and_sort_images` function. It takes 10 images from each group of IoU ranges. Let's consider the top group - $[.35, .5)$. It might have happened that there was a smaller (than 10) number of images in this group, but now these images are considered to be members of the positive category. However, in the lower groups there were usually 10 images. So lowering of the IoU threshold had a side effect of including more "No crack" images because there was just more images without cracks in the lower IoU groups.
+<b>Side note</b>: you might have noticed the support value changes between the two reports. It happened because the IoU threshold was lowered. The specific reason for why the number of "Crack" instances grew is that with a lower threshold, more samples are considered cracks, which is kind of obvious. However, the number of "No crack" instances also grew slightly, so why is that? Look at the `filter_and_sort_images` function. It takes 10 images from each group of IoU ranges. Let's consider the top group - $$[.35, .5)$$. It might have happened that there was a smaller (than 10) number of images in this group, but now these images are considered to be members of the positive category. However, in the lower groups there were usually 10 images. So lowering of the IoU threshold had a side effect of including more "No crack" images because there was just more images without cracks in the lower IoU groups.
 
 Now we end up with two decent models - one with 70% / 78% precision / recall level and the last one that got 73% / 77% precision / recall level for the positice class. 
 
