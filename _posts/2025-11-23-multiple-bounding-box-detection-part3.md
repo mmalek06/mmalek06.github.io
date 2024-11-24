@@ -361,7 +361,7 @@ $$\begin{aligned}
 \text{Focal Loss} = - \frac{1}{N} \sum_{i=1}^{N} \alpha_t \cdot (1 - p_t)^\gamma \cdot BCE Loss_i
 \end{aligned}$$
 
-Where $p_t$ is defined as (and $𝑝=\sigma(inputs)$ - i.e., the sigmoid of the raw model outputs):
+Where $$p_t$$ is defined as (and $$p=\sigma(inputs)$$ - i.e., the sigmoid of the raw model outputs):
 
 $$\begin{aligned}
 p_t = 
