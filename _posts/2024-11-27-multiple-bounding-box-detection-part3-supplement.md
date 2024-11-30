@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "Multiple bounding box detection, Part 3 - fine tuning the backbone network"
-date: 2025-11-23 00:00:00 -0000
+date: 2024-11-27 00:00:00 -0000
 categories: Python
 tags: ["python", "pytorch", "transfer learning", "image vision", "math"]
 ---
@@ -12,7 +12,7 @@ In my [previous post](https://mmalek06.github.io/python/2024/11/23/multiple-boun
 
 ## The code
 
-The code that I had to add is just a single function. It just loads bounding boxes as defined in the coco files, then crops the images accordingly and lastly, resizes them so that they conform to the backbone network requirements. Note the `1_0.1` fragment right before re-appending the file extension. The first part is the IoU threshold which obviously equals 1, the other is the class label - 1 as well.
+The code that I had to add is just a single function. It loads bounding boxes as defined in the coco files, then crops the images accordingly and lastly, resizes them so that they conform to the backbone network requirements. Note the `1_0.1` fragment right before re-appending the file extension. The first part is the IoU threshold which obviously equals 1, the other is the class label - 1 as well - all that to match the format used by data loaders.
 
 ```python
 transforms = v2.Compose([
@@ -71,8 +71,37 @@ def extract_and_save_bboxes(images_dir: str, annotations_file: str, output_dir: 
             print(f"Processed {processed_count} cropped images.")
 ```
 
-Now as for the training code - there's a little bit of history here. First I tried rerunning every notebook, but that turned out to be an exercise in futility, because the worst performing networks were performing badly even after supplementing the dataset with more positive instances. However, the results changed drastically for the two best networks. 
+Now as for the training code - there's a little bit of background here. In the previous posts I mentioned that my goal wasn't finding the best performing network - what I mean by that is that I didn't want to optimize indefinitely. I only wanted to try out couple approaches to obtain a somewhat satisfying result and move on. I do all the training on my home PC with RTX3600, and even at the time of writing this, it's not a speed demon. So far training the networks took more than a month, so at some point I just had to say "stop". So for this supplementing article I didn't go through all the approaches I tried and I only focused on the two best performing ones. That would be a mistake "in real life" though. Also, for similar reasons I haven't tried other optimization approaches so far, like cross-validation, hyperparameter tuning etc. - I just didn't have time for that, but I'm aware of their importance. 
 
-<b>Side note:</b>: I'm writing this as if I was re-training different architectures, but I was not doing that. The architectures are the same, what changed was everything around them - IoU thresholds, using different sampling strategies, weighing the classes differently and finally switching to another loss function.
+Now, to the solution: I was surprised how much the presence of those additional samples changed the landscape. First I tried rerunning the notebook that contained the `WeightedRandomSampler` with `BCELoss` function and these were the results:
 
+<pre>
+              precision    recall  f1-score   support
 
+    No crack       0.83      0.79      0.81     39615
+       Crack       0.73      0.78      0.76     28723
+</pre>
+
+The recall for the "Crack" class didn't change, but the precision did, which means the model is now able to detect slightly more true positives. I wasn't really happy with the results because the accuracy/loss plots showed signs of overfitting at a very early stage, so after being done with that notebook, I run the one where I used the `sigmoid_focal_loss` function. Interestingly, adding more positive examples made the results worse as compared to the above and to the results achieved when I previously trained a network with that loss function:
+
+<pre>
+              precision    recall  f1-score   support
+
+    No crack       0.79      0.83      0.81     39615
+       Crack       0.75      0.70      0.72     28723
+</pre>
+
+That's a huge performance degradation. Why did it happen? Well, as you may remember from my previous description of the `sigmoid_focal_loss` function, it contains some moving parts, namely the modulating factor (and two other, but I'll talk about them in a moment). It seems that with a base version of this loss function, that is, the one with $$\alpha$$ not being used, the modulating factor's behavior made the model pay less attention to the positive class examples - the class in overall became easier to find. I could have created a similar, but customized loss function to influence it, but why do that if there's already something that can change the modulating factor's weight - the $$\alpha$$ parameter. Like I wrote couple paragraphs above: I did not perform any hyperparameter tuninng, nor cross-validation to find the best $$\alpha$$, I basically picked a random number greater than $$0.5$$ - why greater than that? Because in the previous post the default value of $$0.25$$ degraded the model's performance greatly. This time I choose to set it to $$0.6$$ and here are the results:
+
+<pre>
+              precision    recall  f1-score   support
+
+    No crack       0.85      0.71      0.77     39615
+       Crack       0.67      0.82      0.74     28723
+</pre>
+
+As expected, the recall values for the two classes almost reversed, but that's a good thing: remember the goal I've set - which was to optimize for "Crack" class recall.
+
+## Conclusion
+
+With all that said, now I'm set up for the next phase which is training a non-neural network classifier. In the original R-CNN paper they chose it to be a SVM, but I think I'll divert from that slightly and try gradient-boosting approaches with XGB and LightGMB, just for fun and learning.
