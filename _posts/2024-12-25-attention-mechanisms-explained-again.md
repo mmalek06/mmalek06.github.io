@@ -14,7 +14,7 @@ It's been a long time since I last crammed transformer knowledge into my brain, 
 
 ## The code, the math
 
-In his short book Helgoland, Carlo Rovelli write (not a direct quote) that "it's all in the relations". Elements of matter don't possess intrinsic properties on their own; rather, they exhibit certain properties through interactions with other elements of matter. Reality is relational, and to a big extent, the same applies to language, as the transformer architecture demonstrates.
+In his short book Helgoland, Carlo Rovelli writes (not a direct quote) that "it's all in the relations". Elements of matter don't possess intrinsic properties on their own; rather, they exhibit certain properties through interactions with other elements of matter. Reality is relational, and to a big extent, the same applies to language, as the transformer architecture demonstrates.
 
 The first component of the transformer encoder module is the embedding layer combined with positional encoding. Explaining these in detail isn't the goal of this post, so I'll cover them in general terms. Let's assume a sentence has passed through this initial layer and is now represented by six vectors:
 
