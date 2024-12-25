@@ -14,9 +14,9 @@ It's been a long time since I last crammed transformer knowledge into my brain, 
 
 ## The code, the math
 
-In his short book Helgoland, Carlo Rovelli writes (not a direct quote) that "it's all in the relations". Elements of matter don't possess intrinsic properties on their own; rather, they exhibit certain properties through interactions with other elements of matter. Reality is relational, and to a big extent, the same applies to language, as the transformer architecture demonstrates.
+In his short book Helgoland, Carlo Rovelli writes (not a direct quote) "it's all in the relations". Elements of matter don't possess intrinsic properties on their own; rather, they exhibit certain properties through interactions with other elements of matter. Reality is relational, and to a big extent, the same applies to language, as the transformer architecture demonstrates.
 
-The first component of the transformer encoder module is the embedding layer combined with positional encoding. Explaining these in detail isn't the goal of this post, so I'll cover them in general terms. Let's assume a sentence has passed through this initial layer and is now represented by six vectors:
+The first component of the transformer encoder module is the embedding layer combined with positional encoding. Explaining these in detail isn't the goal of this post, but I'll try to cover them using my understanding. Let's assume a sentence has passed through this initial layer and is now represented by six vectors:
 
 ```python
 v1 = np.array([1, 0, 0])
@@ -70,7 +70,7 @@ The two blue ones point mostly in the same direction, as do the red ones. The ye
 
 Think: semantic meaning. The vectors in blue and red pairs may be sharing meaning (vector to vector, not pair to pair), like: (v1, v2) = (dog, puppy) and (v3, v4) = (forest, tree). The v6, yellow vector, is supposed to be kind of a "bridge" - something that holds meaning common to the two pairs, but I can't come up with any word to illustrate that :) The v5 vector is supposed to be the oposite to the red ones - I'm also unable to come up with a good example, but I think this setup is so easy to understand that examples are not really necessary. All those relations can be mathematically described with cosine similarity function - it will be used later.
 
-The semantic meaning is obtained, but the transformer architecture also uses positional information and they encode that with function similar to this one:
+The semantic meaning is obtained, but the transformer architecture also uses positional information and the authors of the original paper encode that with function similar to this one:
 
 ```python
 def positional_encoding(position: int, d_model: int) -> np.ndarray:
@@ -109,23 +109,21 @@ def get_similarities(vectors: np.ndarray):
         print(f"{pair}: {similarity:.2f}")
 ```
 
-I initially treated positional encodings as a technical detail that helps transformers perform better, but I never really questioned why the function is defined the way it is. When I started Googling and ChatGPT-ing for answers, every explanation seemed to deepen my confusion. I began to suspect that I may be missing the mathematical intuition needed to analyze this like a pro. So, being as lazy as I am, I opted for an empirical approach. I asked myself two questions:
+I initially treated positional encodings as a technical detail that helps transformers perform better and I never really questioned why the function is defined the way it is. When I started Googling and ChatGPT-ing for answers, every explanation seemed to deepen my confusion. I began to suspect that I may be missing the mathematical intuition needed to analyze this like a pro. So, being as lazy as I am, I opted for an empirical approach. I asked myself two questions:
 
 1. Why can't either sine or cosine function be used? Why use both?
 2. Can I come up with another function that would encode positional information like this one does?
 
 The first question can be explained easily if you make the step range function argument equal to 2 and you comment out the if statement. This is the result:
-
 <img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/positional-encodings.png" /><br />
-
-There are three pairs, and vectors in each of them overlap so it seems they don't encode positional information very well. However, when this function is used, it gets better:
+There are three pairs, and vectors in each of them overlap so it seems they don't encode positional information very well. However, when the `positional_encoding` function is used in the form I posted here, it gets better:
 
 <div style="height: 400px">
     <img style="width: 360px; float: left" src="https://mmalek06.github.io/images/positional-encodings-sin-cos-1.png" />
     <img style="width: 360px; float: right" src="https://mmalek06.github.io/images/positional-encodings-sin-cos-2.png" />
 </div>
 
-They still overlap to some extent. However, note that they are less orthogonal. To check how this looks like in 512 dimensions I just run the `get_similarities` function for positional encodings generated for 512 dimensions. Then I did the same for 3d vectors and these are the cosine similarity results between each pair of vectors:
+They still overlap to some extent. However, note that they got closer together (and the orthogonality of the green vector with the two pairs vanished). To check how this looks like in 512 dimensions I just run the `get_similarities` function for positional encodings generated for 512 dimensions. Then I did the same for 3d vectors and these are the cosine similarity results between each pair of vectors:
 
 ```plaintext
 Cosine Similarity between vector pairs (3d):
@@ -165,9 +163,7 @@ v5 and v6: 0.97
 
 In higher dimensions, positional information becomes more clustered and lacks abrupt jumps. Stability is a quality most AI architecture designers strive for, and this method of positional encoding seems to provide consistently stable values.
 
-As for the second question (<i>"Can I come up with another function that would encode positional information like this one does?"</i>) - there are likely many possible functions, but I lack the mathematical tools to identify them. So, my answer is no. :)
-
-One idea I considered was dividing the word's position number (e.g., 1, 2, etc.) by the dimensionality value (e.g., 1/512, 2/512) and then adding that fraction to each dimension. However, this approach would result in a linear function, which might not be desirable here. Additionally, the values would become unevenly distributed at the edges of the range: tiny for the early words and excessively large at the end. In an extreme scenario with a sequence of 512 tokens, the final token would require adding 1 (one) to each dimension.
+As for the second question (<i>"Can I come up with another function that would encode positional information like this one does?"</i>) - there are likely many possible functions, but I lack the mathematical tools to identify them. So, my answer is no :) However, one idea I considered was dividing the word's position number (e.g., 1, 2, etc.) by the dimensionality value (e.g., 1/512, 2/512) and then adding that fraction to each dimension. However, this approach would result in a linear function, which might not be desirable here. Additionally, the values would become unevenly distributed at the edges of the range: tiny for the early words and excessively large at the end. In an extreme scenario with a sequence of 512 tokens, the final token would require adding 1 (one) to each dimension.
 
 In contrast, the sine and cosine combination offers a much more constrained and stable representation. That said, this is merely a hypothesis - I'm aware it's more hand-waving than a rigorous explanation.
 
@@ -179,6 +175,12 @@ Enter: attention mechanism. The algorithm is as follows:
 2. Their values are scaled down by dividing them by $$\sqrt{d_k}$$ (the dimensionality of each query and key vector).
 3. That's done in case the dot products created in the first step are very large (or small) - that could make the softmax function return skewed probability values and also the gradients would be very small.
 4. Finally, the result of the third step is multiplied by the value matrix $$V$$.
+
+The full equation is as follows:
+
+$$\begin{aligned}
+\text{softmax} (\frac{QK^T}{\sqrt{d_k}})V
+\end{aligned}$$
 
 An obvious question to ask is: what are these matrices, where do they come from? Well, as almost everything in AI, they are learned. In short, the Query (
 $$Q$$), Key ($$K$$), and Value ($$V$$) matrices are derived from the input vectors using learned weight matrices. These weight matrices ($$W_Q$$, $$W_K$$, $$W_V$$) are the ones being adjusted during training, while $$Q$$, $$K$$ and $$VV$$ are their projections on these weight spaces. I saw the best intuitive explanation about them [here](https://community.deeplearning.ai/t/confusion-about-q-k-and-v-matrices/426146/2). I'll expand on it adding just a few words to the $$K$$ matrix explanation. Think of the $$K$$ matrix as representing "keywords" or "matching criteria" that other tokens will use to determine relevance. While the $$V$$ matrix holds the content payload, the $$K$$ matrix acts like a filter or signature that determines how well a token aligns with a Query.  So, when you state the problem the way mr. Juan Olano does, it seems that the goal of attention mechanism is to obtain input vector representations that would add those three dimensions:
