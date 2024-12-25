@@ -299,7 +299,7 @@ plt.show()
     <img style="width: 360px; float: right" src="https://mmalek06.github.io/images/attention-result-2.png" />
 </div>
 
-These two perspectives show that `v6` has been found to be contextually correlated with `v1` and `v2` (which are still contextually correlated anyway) and contextually decorrelated from `v3` and `v4`. And that's all folks!
+These two perspectives show that `v6` has been found to be contextually correlated with `v1` and `v2` (which are still contextually correlated anyway) and contextually decorrelated from `v3` and `v4`. Obviously, this is just an oversimplified projection that I wrote to understand the purpose of each part. In a real transformer model, or better yet, something as big as ChatGPT, it's not as straightforward. It takes many iterations and an incredibly large dataset to actually get the correct contextual meaning as shown in the last example with rotations.
 
 ## Summary
 
