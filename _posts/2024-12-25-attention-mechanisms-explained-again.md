@@ -1,12 +1,12 @@
 ---
 layout: post
-title: "Explaining transformer attention to myself"
+title: "Attention mechanisms explained... Again!"
 date: 2024-12-25 00:00:00 -0000
 categories: Linear algebra
 tags: ["linear algebra", "math", "python", "numpy", "matplotlib"]
 ---
 
-# Explaining transformer attention to myself
+# Attention mechanisms explained... Again!
 
 While still [experimenting with the ancientR-CNN architecture](https://mmalek06.github.io/python/2024/11/23/multiple-bounding-box-detection-part3.html), I often find myself exploring different territories - mainly because of the long wait times while models finish training. This time, my thoughts drifted toward the transformer architecture. It might seem funny, given that the whole world seems to understand and use it already - and so did I - until I realized I don't fully grasp the attention mechanism at its core. That's a problem since attention is the essence of transformers.
 
