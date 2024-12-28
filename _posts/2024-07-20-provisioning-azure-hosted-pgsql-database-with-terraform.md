@@ -2,7 +2,7 @@
 layout: post
 title: "Provisioning an Azure-hosted PostgreSQL database with Terraform"
 date: 2024-07-19 15:00:00 -0000
-categories: Cloud
+categories: Cloud, Terraform
 tags: ["cloud", "azure", "terraform", "c#", "shell", "powershell"]
 ---
 

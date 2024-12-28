@@ -2,7 +2,7 @@
 layout: post
 title: "Building an Azure serverless app"
 date: 2024-07-19 15:00:00 -0000
-categories: Cloud
+categories: Cloud, Serverless, C#
 tags: ["cloud", "azure", "functions", "azure-function", "c#", "open-api"]
 ---
 

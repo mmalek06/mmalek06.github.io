@@ -2,7 +2,7 @@
 layout: post
 title: "Provisioning Azure infrastructure for deep learning project"
 date: 2024-10-27 00:00:00 -0000
-categories: Cloud
+categories: Cloud, Terraform
 tags: ["cloud", "azure", "terraform", "shell"]
 ---
 

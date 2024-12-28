@@ -2,8 +2,8 @@
 layout: post
 title: "Attention mechanisms explained... Again!"
 date: 2024-12-25 00:00:00 -0000
-categories: Linear algebra
-tags: ["linear algebra", "math", "python", "numpy", "matplotlib"]
+categories: Linear algebra, Transformers, Python
+tags: ["linear algebra", "transformers", "math", "python", "numpy", "matplotlib"]
 ---
 
 # Attention mechanisms explained... Again!
