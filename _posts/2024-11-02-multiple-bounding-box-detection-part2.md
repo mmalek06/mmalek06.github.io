@@ -2,8 +2,8 @@
 layout: post
 title: "Multiple bounding box detection, Part 2 - preparing region proposals for the fine tuning phase"
 date: 2024-11-02 00:00:00 -0000
-categories: Python, Image Vision
-tags: ["python", "pytorch", "transfer learning", "image vision", "selective search", "opencv"]
+categories: Python, Computer Vision
+tags: ["python", "pytorch", "transfer learning", "computer vision", "selective search", "opencv"]
 ---
 
 # Multiple bounding box detection, Part 2 - preparing region proposals for the fine tuning phase

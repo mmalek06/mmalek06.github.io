@@ -2,8 +2,8 @@
 layout: post
 title: "Multiple bounding box detection, Part 3 - fine tuning the backbone network"
 date: 2024-11-27 00:00:00 -0000
-categories: Python, Image Vision
-tags: ["python", "pytorch", "transfer learning", "image vision", "math"]
+categories: Python, Computer Vision
+tags: ["python", "pytorch", "transfer learning", "computer vision", "math"]
 ---
 
 # Multiple bounding box detection, Part 3 - fine tuning the backbone network: supplement

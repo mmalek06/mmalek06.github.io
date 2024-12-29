@@ -2,8 +2,8 @@
 layout: post
 title: "Multiple bounding box detection, Part 1 - data preparation"
 date: 2024-08-04 00:00:00 -0000
-categories: Python, Image Vision
-tags: ["python", "image vision", "opencv", "flood fill"]
+categories: Python, Computer Vision
+tags: ["python", "computer vision", "opencv", "flood fill"]
 ---
 
 # Multiple bounding box detection, Part 1 - data preparation
