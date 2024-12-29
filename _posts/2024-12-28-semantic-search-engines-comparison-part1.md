@@ -2,13 +2,15 @@
 layout: post
 title: "Semantic search engines comparison, Part 1 - ChromaDB, Elasticsearch and PostgreSQL"
 date: 2024-12-28 00:00:00 -0000
-categories: Transformers, Python, Semantic Search
-tags: ["linear algebra", "transformers", "semantic search", "chromadb", "milvus", "elasticsearch", "postgresql", "ponyorm", "fastapi"]
+categories: Transformers, Python, Semantic Search, Vector Database
+tags: ["linear algebra", "transformers", "semantic search", "chromadb", "milvus", "elasticsearch", "postgresql", "ponyorm", "fastapi", "vector database"]
 ---
 
 # Semantic search engines comparison, Part 1 - ChromaDB, Elasticsearch and PostgreSQL
 
 When I wrote [the last post](https://mmalek06.github.io/linear/algebra/2024/12/25/attention-mechanisms-explained-again.html) I realized I didn't know much about how modern similarity search engines work. It's time to rectify that. In this two-part series, I'll explore two modern vector databases used for semantic search and two "classic" engines that have been updated in recent years to handle this scenario more effectively. These engines are ChromaDB, Milvus, Elasticsearch, and PostgreSQL. I'll talk about Milvus in the next post, as it needs to run under a Linux environment and emulating that with Docker gives me a lot of headache, and I didn't take my Linux machine with me on this Christmas break. I won't really go into any details describing the other features (like hybrid search), as I only want to focus on a single one - semantic search.
+
+<b>Side note:</b> I'm aware of Pinecone, however, however in this series I wanted to focus either on something I already know (classis relational DB, Elasticsearch) or on novelties that seemed to be simple enough (ChromaDB, Milvus). I'll probably get to Pinecone eventually in another post.
 
 ## Requirements
 
@@ -223,6 +225,8 @@ Checking for the most performant combination was not really the goal here but I 
 
 ### Common code
 
+A word before I delve into the code: I tried leveraging the fact that FastAPI is an asynch-first framework wherever I could in order to stay close to the engineering principles they suggest.
+
 Now let's dive into the shared components of this project starting with entities:
 
 ```python
@@ -404,62 +408,70 @@ The pattern you'll notice in each route is that there are two functions for inde
 
 ```python
 @chroma_router.post("/vectorize/all-mpnet-base-v2")
-def vectorize_using_all_mpnet_base_v2_transformer(
+async def vectorize_using_all_mpnet_base_v2_transformer(
         db_session: DBSessionContextManager = Depends(get_db_session),
-        client: chromadb.ClientAPI = Depends(get_chroma_client),
+        client_coroutine: Coroutine[Any, Any, chromadb.AsyncClientAPI] = Depends(get_chroma_client),
         model: SentenceTransformer = Depends(get_all_mpnet_base_v2_transformer)
 ) -> None:
-    _vectorize_with(db_session, client, model, GENERAL_PURPOSE_COL)
+    client = await client_coroutine
+
+    await _vectorize_with(db_session, client, model, GENERAL_PURPOSE_COL)
 
 
 @chroma_router.post("/vectorize/multi-qa-mpnet-base-cos-v1")
-def vectorize_using_multi_qa_cos_v1_transformer(
+async def vectorize_using_multi_qa_cos_v1_transformer(
         db_session: DBSessionContextManager = Depends(get_db_session),
-        client: chromadb.ClientAPI = Depends(get_chroma_client),
+        client_coroutine: Coroutine[Any, Any, chromadb.AsyncClientAPI] = Depends(get_chroma_client),
         model: SentenceTransformer = Depends(get_multi_qa_mpnet_base_cos_v1_transformer)
 ) -> None:
-    _vectorize_with(db_session, client, model, SEMANTIC_SEARCH_COL)
+    client = await client_coroutine
+
+    await _vectorize_with(db_session, client, model, SEMANTIC_SEARCH_COL)
 ```
 
 And two other ones that are used for searching:
 
 ```python
-@chroma_router.get("/search/all-mpnet-base-v2", response_model=Iterable[dict])
-def all_mpnet_base_v2_search(
+@chroma_router.get("/search/all-mpnet-base-v2", response_model=Iterable[SearchResult])
+async def all_mpnet_base_v2_search(
         query_string: str,
         db_session: DBSessionContextManager = Depends(get_db_session),
-        client: chromadb.ClientAPI = Depends(get_chroma_client),
+        client_coroutine: Coroutine[Any, Any, chromadb.AsyncClientAPI] = Depends(get_chroma_client),
         model: SentenceTransformer = Depends(get_all_mpnet_base_v2_transformer)
 ) -> Iterable[SearchResult]:
-    return _search(query_string, db_session, client, model, GENERAL_PURPOSE_COL)
+    client = await client_coroutine
+
+    return await _search(query_string, db_session, client, model, GENERAL_PURPOSE_COL)
 
 
-@chroma_router.get("/search/multi-qa-mpnet-base-cos-v1", response_model=Iterable[dict])
-def multi_qa_mpnet_base_cos_v1_search(
+@chroma_router.get("/search/multi-qa-mpnet-base-cos-v1", response_model=Iterable[SearchResult])
+async def multi_qa_mpnet_base_cos_v1_search(
         query_string: str,
         db_session: DBSessionContextManager = Depends(get_db_session),
-        client: chromadb.ClientAPI = Depends(get_chroma_client),
+        client_coroutine: Coroutine[Any, Any, chromadb.AsyncClientAPI] = Depends(get_chroma_client),
         model: SentenceTransformer = Depends(get_multi_qa_mpnet_base_cos_v1_transformer)
 ) -> Iterable[SearchResult]:
-    return _search(query_string, db_session, client, model, SEMANTIC_SEARCH_COL)
+    client = await client_coroutine
+
+    return await _search(query_string, db_session, client, model, SEMANTIC_SEARCH_COL)
 ```
 
 However, the corresponding `_vectorize` and `_search` functions are very different. Let's start by looking at the chromadb vectorization function:
 
 ```python
-def _vectorize_with(
+async def _vectorize_with(
         db_session: DBSessionContextManager,
-        client: chromadb.ClientAPI,
+        client: chromadb.AsyncClientAPI,
         model: SentenceTransformer,
         collection: str
 ) -> None:
     try:
-        client.get_collection(collection)
-        client.delete_collection(collection)
+        await client.get_collection(collection)
+        await client.delete_collection(collection)
     except Exception as exc:
         print(exc)
 
-    collection = client.create_collection(collection, metadata={"hnsw:space": "cosine"})
+    collection = await client.create_collection(collection, metadata={"hnsw:space": "cosine"})
     tokenizer = model.tokenizer
 
     with db_session:
@@ -482,6 +494,7 @@ def _vectorize_with(
                 embeddings.append(embedding.tolist())
 
         chunk_size = 2048
+        workers = []
 
         for ids_chunk, docs_chunk, metadatas_chunk, embeddings_chunk in zip(
                 _chunkify(ids, chunk_size),
@@ -489,31 +502,35 @@ def _vectorize_with(
                 _chunkify(metadatas, chunk_size),
                 _chunkify(embeddings, chunk_size)
         ):
-            collection.add(
-                documents=docs_chunk,
-                metadatas=metadatas_chunk,
-                ids=ids_chunk,
-                embeddings=embeddings_chunk
+            workers.append(
+                collection.add(
+                    documents=docs_chunk,
+                    metadatas=metadatas_chunk,
+                    ids=ids_chunk,
+                    embeddings=embeddings_chunk
+                )
             )
+
+    await asyncio.gather(*workers)
 ```
 
-Each time it runs, it recreates chroma collections. By default chroma uses l2 distance calculation (I think), so I needed to set the `hnsw:space` parameter to `cosine` explicitly, otherwise the distance numbers returned from chroma didn't correspond to the ones obtained by running `model.similarity` method. After the collection is created this code splits article texts into smaller chunks, so that they can be properly tokenized and encoded.
+Each time it runs, it recreates chroma collections. By default chroma uses l2 distance calculation (I think), so I needed to set the `hnsw:space` parameter to `cosine` explicitly, otherwise the distance numbers returned from chroma didn't correspond to the ones obtained by running `model.similarity` method. After the collection is created this code splits article texts into smaller chunks, so that they can be properly tokenized and encoded. The last lines initialize ChromaDB indexing.
 
 <b>Side note:</b> you don't have to pass in embeddings directly like that. You can use chroma defaults in which case you'd only pass documents to the `collection.add` call. Chroma driver would then internally encode the document. It may not be enough though, because the default model it uses is `all-MiniLM-L6-v2` and there are better (and slower) ones.
 
 The `_search` function is a little bit shorter:
 
 ```python
-def _search(
+async def _search(
         query_string: str,
         db_session: DBSessionContextManager,
-        client: chromadb.ClientAPI,
+        client: chromadb.AsyncClientAPI,
         model: SentenceTransformer,
         collection: str
 ) -> Iterable[SearchResult]:
-    collection = client.get_or_create_collection(collection)
+    collection = await client.get_or_create_collection(collection)
     query_vector = model.encode(query_string or "")
-    results = collection.query(query_embeddings=query_vector)
+    results = await collection.query(query_embeddings=query_vector)
     id_to_doc_map = _initialize_map(results)
 
     with db_session:
@@ -782,9 +799,10 @@ In the PostgreSQL case, I didn't follow this pattern because I focused on crafti
 
 One weird thing to note is the use of a query variable `$qembedding` that doesn't seem to be set anywhere. If you go into PonyORM docs, you'll find [this section](https://docs.ponyorm.org/database.html#raw-sql). That's the weirdest thing I saw in Python, namely this part:
 
-```text
-When Pony encounters such a parameter within the SQL query it gets the variable value from the current frame (from globals and locals) or from the dictionary which is passed as the second parameter.
-```
+> When Pony encounters such a parameter within the SQL query it gets the variable value from the 
+> current frame (from globals and locals) or from the dictionary which is passed 
+> as the second parameter.
+
 
 <b>"From the current frame"...</b> Yep, they actually inspect the current stack trace to find a variable with a name corresponding to the one used in sql query. Obviously you don't have to use that and be more explicit with the dict parameter, but it sounded so weird, I felt an internal pressure to use it.
 
