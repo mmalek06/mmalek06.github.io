@@ -361,21 +361,37 @@ from pony.orm.core import DBSessionContextManager, db_session
 from sentence_transformers import SentenceTransformer
 
 
+_base_model: SentenceTransformer | None = None
+_alt_model: SentenceTransformer | None = None
+
+
 def get_explicit_default_transformer() -> SentenceTransformer:
     return SentenceTransformer("all-MiniLM-L6-v2")
 
 
 def get_all_mpnet_base_v2_transformer() -> SentenceTransformer:
-    return SentenceTransformer("all-mpnet-base-v2")
+    global _base_model
+
+    if _base_model is None:
+        _base_model = SentenceTransformer("all-mpnet-base-v2")
+
+    return _base_model
 
 
 def get_multi_qa_mpnet_base_cos_v1_transformer() -> SentenceTransformer:
-    return SentenceTransformer("multi-qa-mpnet-base-cos-v1")
+    global _alt_model
+
+    if _alt_model is None:
+        _alt_model = SentenceTransformer("multi-qa-mpnet-base-cos-v1")
+
+    return _alt_model
 
 
 def get_db_session() -> DBSessionContextManager:
     return db_session
 ```
+
+As you can see, these function implement a singleton pattern. That's quite important from the performance standpoint, as creation of a `SentenceTransformer` class each time it's requested takes time and allocated more and more GPU memory.
 
 The `all-MiniLM-L6-v2` sentence transformer is the one ChromaDB driver would use to vectorized the passed in texts by default. I'm not using it though. I'm using the two other ones. `all-mpnet-base-v2` is a decent one, and they say this on the sentence transformers page:
 

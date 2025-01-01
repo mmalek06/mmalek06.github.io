@@ -170,6 +170,6 @@ summary_df = df.groupby(["engine", "model"]).agg(
 summary_df
 ```
 
-First it defines five queries which are then run thirty times for each model+engine combination to obtain a statically significant result.
+This code defines five queries which are then run thirty times for each model+engine combination to obtain a statically significant result. Then the results are aggregated and two numbers are extracted that will inform us of the experiment results.
 
 ## Summary
