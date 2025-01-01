@@ -154,10 +154,10 @@ def render_results(data):
     return HTML(results_html)
 
 
-def run_request(engine: str, model: str, query: str) -> tuple[str, int]:
+def run_request(engine: str, model: str, query: str, model_suffix: str = "") -> tuple[str, int]:
     start_time = time.time()
     response = requests.get(
-        f"http://127.0.0.1:8000/api/v1/{engine}/search/{model}?query_string={query}"
+        f"http://127.0.0.1:8000/api/v1/{engine}/search/{model}{model_suffix}?query_string={query}"
     )
     end_time = time.time()    
     elapsed_time = end_time - start_time
@@ -184,44 +184,7 @@ display(search_engine_box, model_box, text_input, submit, time_label, results_ou
 
 This is the first part of the notebook. Its goal is to display a set of controls that allow me to select the engine, model variation, and input a query to send to the backend. The most interesting part here is the `render_results` function. If you examine it closely, you'll notice that I'm coloring parts of the text differently based on how they were tagged by the backend. The backend assigns three labels to text segments: strong, mid, and weak. These labels correspond to green, yellow, and red highlights in the interface. I didn't just want to retrieve the documents most similar to the query string - I also wanted to see which parts of the text were the most relevant.
 
-This notebook also contains a part dedicated to measuring the performance of each engine+model combination:
-
-```python
-engines = search_engine_box.options
-models = model_box.options
-queries = [
-    "drunk football hooligans",
-    "manifold hypothesis",
-    "fuel prices growing",
-    "climate change",
-    "south america football news"
-]
-results = []
-
-for engine, model, query in itertools.product(engines, models, queries):
-    for i in range(5):
-        try:
-            _, elapsed_time = run_request(engine, model, query)
-            
-            results.append({
-                "engine": engine,
-                "model": model,
-                "query": query,
-                "elapsed_time": elapsed_time
-            })
-        except Exception as e:
-            print(f"Request failed for ({engine}, {model}, {query}): {e}")
-
-df = pd.DataFrame(results)
-summary_df = df.groupby(["engine", "model"]).agg(
-    mean_time=("elapsed_time", "mean"),
-    std_time=("elapsed_time", "std")
-).reset_index()
-
-summary_df
-```
-
-Checking for the most performant combination was not really the goal here but I wrote the code for it anyway, out of curiosity. I'll present the results at the end of this post.
+This notebook also contains a part dedicated to measuring the performance of each engine+model combination but that will be a part of the next post.
 
 ### Common code
 
@@ -238,8 +201,8 @@ from .database import db
 class Article(db.Entity):
     title = Required(str, max_len=1024)
     txt = Required(str)
-    all_mpnet_embeddings = Set("ArticleEmbeddingAllMpnetBaseV2")
-    multi_qa_mpnet_embeddings = Set("ArticleEmbeddingMultiQaMpnetBaseCosV1")
+    all_mpnet_embeddings_halfvec = Set("ArticleEmbeddingAllMpnetBaseV2Halfvec")
+    multi_qa_mpnet_embeddings_halfvec = Set("ArticleEmbeddingMultiQaMpnetBaseCosV1Halfvec")
 
 
 class ArticleEmbeddingAllMpnetBaseV2(db.Entity):
@@ -252,11 +215,23 @@ class ArticleEmbeddingMultiQaMpnetBaseCosV1(db.Entity):
     article = Required(Article)
     sentences = Required(str, max_len=8192)
     embedding = Optional(str, sql_type="vector(768)")
+
+
+class ArticleEmbeddingAllMpnetBaseV2Halfvec(db.Entity):
+    article = Required(Article)
+    sentences = Required(str, max_len=8192)
+    embedding = Optional(str, sql_type="halfvec(768)")
+
+
+class ArticleEmbeddingMultiQaMpnetBaseCosV1Halfvec(db.Entity):
+    article = Required(Article)
+    sentences = Required(str, max_len=8192)
+    embedding = Optional(str, sql_type="halfvec(768)")
 ```
 
 I really like `Ponyorm`. I haven't used it in a commercial project yet because usually the team would choose the more popular option, which is `SQLAlchemy` but since this one is a non-commercial one, I can pick whatever I want and I decided that `pony` will make my life easier. When I started learning Python some 16 years ago I kept hearing the term "idiomatic python" everywhere, maybe this is why I like `pony` so much - in the simple case it allows us to write code that will select data from the db as if it was a standard Python collection. It looks pretty and I deserve pretty things :)
 
-And so, above you can see a standard `ponyorm` entity definitions with one twist - it doesn't natively support the vector type (but that's not an issue, vectors will only be used on the database level, not in python). Out of these three entities "shared" is only the first one - it was used in the `seed` notebook to populate the set of articles. They will be selected and processed by each of the routes I describe next.
+And so, above you can see a standard `ponyorm` entity definitions with one twist - it doesn't natively support the vector type (but that's not an issue, vectors will only be used on the database level, not in python). Of these three entities only the first one is "shared" - it was used in the `seed` notebook to populate the set of articles. The other ones will come into play in the post about performance.
 
 Now let's talk about the `text_manipulation.py` file starting with the contained `chunk_text` function and the accompanying `_ensure_punkt_downloaded` one:
 
@@ -401,6 +376,12 @@ def get_multi_qa_mpnet_base_cos_v1_transformer() -> SentenceTransformer:
 def get_db_session() -> DBSessionContextManager:
     return db_session
 ```
+
+The `all-MiniLM-L6-v2` sentence transformer is the one ChromaDB driver would use to vectorized the passed in texts by default. I'm not using it though. I'm using the two other ones. `all-mpnet-base-v2` is a decent one, and they say this on the sentence transformers page:
+
+> The all-mpnet-base-v2 model provides the best quality
+
+The choice of the other one was a semi-random one. I just needed another model to compare the results both in terms of performance and search results relevancy. In this case the vectors obtained from `multi-qa-mpnet-base-cos-v1` do a better job in the second case.
 
 ### ChromaDB
 
@@ -557,19 +538,25 @@ Nowadays Elasticsearch team is doing what the rest of the world is doing - adopt
 
 Well, it got better and simpler with the inception of `dense_vector` and all the stuff around it. The classic ES search capabilities suffered from lack of contextual understanding, so if you didn't use the set of words ES used to index a given document, you wouldn't see it on the result list. `dense_vector` allows ES to implement an actual semantic search engine.
 
-The main routes for vectorization and search look mostly the same as in the ChromaDB case, so let's dive straight into the vectorization function:
+The main routes for vectorization and search look mostly the same as in the ChromaDB case. One difference is that I added endpoints for vectorization with quantization turned on, but they look the same anyway. Let's dive straight into the vectorization function:
 
 ```python
 async def _vectorize_with(
         db_session: DBSessionContextManager,
         client: AsyncElasticsearch,
         model: SentenceTransformer,
-        index: str
+        index: str,
+        quantize: bool = False
 ) -> None:
     if await client.indices.exists(index=index):
         await client.indices.delete(index=index)
 
     tokenizer = model.tokenizer
+
+    if quantize:
+        more_options = dict(index_options=dict(type="int4_hnsw"))
+    else:
+        more_options = dict(index_options=dict(type="hnsw"))
 
     es_index = dict(
         mappings=dict(
@@ -579,7 +566,9 @@ async def _vectorize_with(
                     type="dense_vector",
                     dims=model.get_sentence_embedding_dimension(),
                     index=True,
-                    similarity="cosine"),
+                    similarity="cosine",
+                    **more_options
+                ),
                 doc_id=dict(type="integer"),
             )
         )
@@ -624,10 +613,11 @@ async def _vectorize_with(
 
 <b>Side note:</b> there's an error here. I remember reading ponyorm docs saying it doesn't play nicely with async code, like the one shown here, and gave an example that looked similar in structure to this one. Why is it like this then? Well, in its first version I didn't use `AsyncElasticsearch` class but its sync twin - all the code was sync. Then I just switched the implementation, but I tested it only by using the search endpoints; their code is shaped differently and it works with async/await. I didn't run the vectorization process because it takes time.
 
-Two things here: 
+Three things here: 
 
-1. If similarity argument isn't set explicitly ES will use l2.
-2. They also offer the built-in embedding mechanisms. Given the fact that ES can be deployed in a cluster, thus the embedding process can be offloaded to the database itself, that might be the smarter move in production code (because the server app wouldn't be the bottleneck), but here, embedding on the server is good enough.
+1. I'll talk about `int4_hnsw` in the next post.
+2. If similarity argument isn't set explicitly ES will use l2.
+3. They also offer the built-in embedding mechanisms. Given the fact that ES can be deployed in a cluster, thus the embedding process can be offloaded to the database itself, that might be the smarter move in production code (because the server app wouldn't be the bottleneck), but here, embedding on the server is good enough.
 
 As for the search function, I only put it here as a context. The real interesting part is in the `_initialize_map` function:
 
@@ -719,11 +709,19 @@ Remember the `ArticleEmbeddingAllMpnetBaseV2` and `ArticleEmbeddingMultiQaMpnetB
 def _vectorize_with(
         db_session: DBSessionContextManager,
         model: SentenceTransformer,
-        entity_constructor: Callable[[Article, str, str], Any]
+        entity_constructor: Callable[[Article, str, str], Any],
+        table_name: str,
+        halfvec: bool = False
 ) -> None:
     tokenizer = model.tokenizer
 
     with db_session:
+        if not halfvec:
+            db.execute(f"CREATE INDEX {table_name}_embedding_idx ON {table_name} USING hnsw (embedding vector_cosine_ops);")
+        else:
+            db.execute(
+                f"CREATE INDEX {table_name}_embedding_idx ON {table_name} USING hnsw (embedding halfvec_cosine_ops);")
+
         all_item_ids = [item for item in select(x.id for x in Article)]
 
     for batch in _chunk_list(all_item_ids, 100):
@@ -747,12 +745,16 @@ def _search(
         db_session: DBSessionContextManager,
         model: SentenceTransformer,
         query_string: str,
-        table_name: str
+        table_name: str,
+        halve: bool = False
 ) -> Iterable[SearchResult]:
     query_embedding = model.encode(query_string).tolist()
     qembedding = json.dumps(query_embedding)
 
     with db_session:
+        if halve:
+            db.execute("SET LOCAL hnsw.ef_search = 20;")
+
         query = """
             WITH best_articles AS (
                 SELECT ae.article AS article_id, MIN(ae.embedding <=> $qembedding) AS best_distance
@@ -802,7 +804,6 @@ One weird thing to note is the use of a query variable `$qembedding` that doesn'
 > When Pony encounters such a parameter within the SQL query it gets the variable value from the 
 > current frame (from globals and locals) or from the dictionary which is passed 
 > as the second parameter.
-
 
 <b>"From the current frame"...</b> Yep, they actually inspect the current stack trace to find a variable with a name corresponding to the one used in sql query. Obviously you don't have to use that and be more explicit with the dict parameter, but it sounded so weird, I felt an internal pressure to use it.
 
