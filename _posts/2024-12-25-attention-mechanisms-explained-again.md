@@ -59,7 +59,7 @@ plt.tight_layout()
 plt.show()
 ```
 
-<b>Side note</b>: I might as well used 2d vector representations, but I needed some fanciness in my life and adding another dimensions doesn't make this probelm harder to understand.
+<b>Side note</b>: I might as well used 2d vector representations, but I needed some fanciness in my life and adding another dimensions doesn't make this problem harder to understand.
 
 The two blue ones point mostly in the same direction, as do the red ones. The yellow one is somewhere inbetween and the green one points to the direction oposite to the red ones, and is orthogonal to the blue ones:
 

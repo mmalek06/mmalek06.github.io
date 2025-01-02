@@ -8,7 +8,7 @@ tags: ["linear algebra", "transformers", "semantic search", "chromadb", "milvus"
 
 # Semantic search engines comparison, Part 1 - ChromaDB, Elasticsearch and PostgreSQL
 
-When I wrote [the last post](https://mmalek06.github.io/linear/algebra/2024/12/25/attention-mechanisms-explained-again.html) I realized I didn't know much about how modern similarity search engines work. It's time to rectify that. In this three-part series, I'll explore two modern vector databases used for semantic search and two "classic" engines that have been updated in recent years to handle this scenario more effectively. These engines are ChromaDB, Milvus, Elasticsearch, and PostgreSQL. I'll talk about Milvus in the next post, as it needs to run under a Linux environment and emulating that with Docker gives me a lot of headache, and I didn't take my Linux machine with me on this Christmas break. I won't really go into any details describing the other features (like hybrid search), as I only want to focus on a single one - semantic search.
+When I wrote [the last post](https://mmalek06.github.io/linear/algebra/2024/12/25/attention-mechanisms-explained-again.html) I realized I didn't know much about how modern similarity search engines work. It's time to rectify that. In this three-part series, I'll explore two modern vector databases used for semantic search and two "classic" engines that have been updated in recent years to handle this scenario more effectively. These engines are ChromaDB, Milvus, Elasticsearch, and PostgreSQL. I'll talk about Milvus in the last post, as it needs to run under a Linux environment and emulating that with Docker gives me a lot of headache - I didn't take my Linux machine with me on this Christmas break. I won't really go into any details describing the other features (like hybrid search), as I only want to focus on a single one - semantic search.
 
 <b>Side note:</b> I'm aware of Pinecone, however, in this series I wanted to focus either on something I already know (classic relational DB, Elasticsearch) or on novelties that seemed to be simple enough (ChromaDB, Milvus). I'll probably get to Pinecone eventually in yet another post.
 
@@ -21,11 +21,11 @@ When I wrote [the last post](https://mmalek06.github.io/linear/algebra/2024/12/2
 
 ## The code
 
-For this experiment I generated a FastAPI backend and some Jupyter Notebooks. I might have as well just done everything in Jupyter Notebooks, but I also wanted to refresh my FastAPI knowledge, and using this framework doesn't really complicate things, as it's so simple. Below you'll find a screenshot of the project layout:
+For this experiment I generated FastAPI backend and created some Jupyter Notebooks. I might have as well just done everything in Jupyter Notebooks, but I also wanted to refresh my FastAPI knowledge, and using this framework doesn't really complicate things. Below you'll find a screenshot of the project layout:
 
 <img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/vectors-layout.png" /><br />
 
-I'll go into details of each route in the section dedicated to that route but first I'd like to create a general overview. Even though Elasticsearch and Postgres (with the pgml extension) offer ways to generate embeddings on the fly, I decided not to use that option. The reason is simple - configuration. With the `pgml` extension [there's a way](https://postgresml.org/docs/open-source/pgml/developers/gpu-support) to configure the database to use GPU, but I didn't want to get buried in the configuration. For Elasticsearch I couldn't really find anything similar. ChromaDB and Milvus on the other hand are GPU-native.
+I'll go into details of each route in the section dedicated to that route but first I'd like to create a general overview. Even though Elasticsearch and Postgres (with the `pgml` extension) offer ways to generate embeddings on the fly, I decided not to use that option. The reason is simple - configuration. With the `pgml` extension [there's a way](https://postgresml.org/docs/open-source/pgml/developers/gpu-support) to configure the database to use GPU, but I didn't want to get buried in the configuration. For Elasticsearch I couldn't really find anything similar. ChromaDB and Milvus on the other hand are GPU-native.
 
 ### Notebooks
 
@@ -187,8 +187,6 @@ This is the first part of the notebook. Its goal is to display a set of controls
 This notebook also contains a part dedicated to measuring the performance of each engine+model combination but that will be a part of the next post.
 
 ### Common code
-
-A word before I delve into the code: I tried leveraging the fact that FastAPI is an asynch-first framework wherever I could in order to stay close to the engineering principles they suggest.
 
 Now let's dive into the shared components of this project starting with entities:
 
