@@ -10,7 +10,7 @@ tags: ["linear algebra", "transformers", "semantic search", "chromadb", "milvus"
 
 When I wrote [the last post](https://mmalek06.github.io/linear/algebra/2024/12/25/attention-mechanisms-explained-again.html) I realized I didn't know much about how modern similarity search engines work. It's time to rectify that. In this two-part series, I'll explore two modern vector databases used for semantic search and two "classic" engines that have been updated in recent years to handle this scenario more effectively. These engines are ChromaDB, Milvus, Elasticsearch, and PostgreSQL. I'll talk about Milvus in the next post, as it needs to run under a Linux environment and emulating that with Docker gives me a lot of headache, and I didn't take my Linux machine with me on this Christmas break. I won't really go into any details describing the other features (like hybrid search), as I only want to focus on a single one - semantic search.
 
-<b>Side note:</b> I'm aware of Pinecone, however, however in this series I wanted to focus either on something I already know (classis relational DB, Elasticsearch) or on novelties that seemed to be simple enough (ChromaDB, Milvus). I'll probably get to Pinecone eventually in another post.
+<b>Side note:</b> I'm aware of Pinecone, however, in this series I wanted to focus either on something I already know (classis relational DB, Elasticsearch) or on novelties that seemed to be simple enough (ChromaDB, Milvus). I'll probably get to Pinecone eventually in another post.
 
 ## Requirements
 
