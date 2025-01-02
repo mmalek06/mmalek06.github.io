@@ -2,7 +2,9 @@
 layout: post
 title: "Deploying AWS lambda to LocalStack with Terraform"
 date: 2024-11-03 00:00:00 -0000
-categories: Cloud, Terraform
+categories: 
+    - Cloud
+    - Terraform
 tags: ["cloud", "aws", "terraform", "localstack", "python", "sklearn", "sam-cli", "powershell"]
 ---
 

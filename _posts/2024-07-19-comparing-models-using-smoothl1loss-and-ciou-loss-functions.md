@@ -2,7 +2,9 @@
 layout: post
 title: "Comparing models using SmoothL1Loss and CIoU loss functions"
 date: 2024-07-19 10:00:00 -0000
-categories: Python, Computer Vision
+categories: 
+    - Python
+    - Computer Vision
 tags: ["computer vision", "pytorch", "python", "ai", "math", "ciou", "smoothl1"]
 ---
 

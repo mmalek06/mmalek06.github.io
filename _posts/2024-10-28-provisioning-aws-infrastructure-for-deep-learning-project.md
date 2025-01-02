@@ -2,7 +2,9 @@
 layout: post
 title: "Provisioning AWS infrastructure for deep learning project"
 date: 2024-10-28 00:00:00 -0000
-categories: Cloud, Terraform
+categories: 
+    - Cloud
+    - Terraform
 tags: ["cloud", "aws", "terraform", "shell"]
 ---
 
