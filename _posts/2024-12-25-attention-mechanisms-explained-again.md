@@ -161,7 +161,7 @@ v4 and v6: 0.91
 v5 and v6: 0.97
 ```
 
-In higher dimensions, positional information becomes more clustered and lacks abrupt jumps. Stability is a quality most AI architecture designers strive for, and this method of positional encoding seems to provide consistently stable values.
+In higher dimensions, positional information becomes more clustered but no two vectors are perfectly aligned (like v2 and v3: 1.00 in the lower-dimensional example), and lacks abrupt jumps. Stability is a quality most AI architecture designers strive for, and this method of positional encoding seems to provide consistently stable values.
 
 As for the second question (<i>"Can I come up with another function that would encode positional information like this one does?"</i>) - there are likely many possible functions, but I lack the mathematical tools to identify them. So, my answer is no :) However, one idea I considered was dividing the word's position number (e.g., 1, 2, etc.) by the dimensionality value (e.g., 1/512, 2/512) and then adding that fraction to each dimension. However, this approach would result in a linear function, which might not be desirable here. Additionally, the values would become unevenly distributed at the edges of the range: tiny for the early words and excessively large at the end. In an extreme scenario with a sequence of 512 tokens, the final token would require adding 1 (one) to each dimension.
 
