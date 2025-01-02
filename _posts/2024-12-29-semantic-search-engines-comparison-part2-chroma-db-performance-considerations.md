@@ -162,14 +162,21 @@ for engine in engines:
                 print(f"Request failed for ({engine}, {model}, {suffix}, {query}): {e}")
 
 df = pd.DataFrame(results)
-summary_df = df.groupby(["engine", "model"]).agg(
-    mean_time=("elapsed_time", "mean"),
-    std_time=("elapsed_time", "std")
-).reset_index()
+summary_df = (df
+              .groupby(["engine", "model"])
+              .agg(
+                  mean_time=("elapsed_time", "mean"),
+                  std_time=("elapsed_time", "std"))
+              .sort_values(by="mean_time", ascending=False)
+              .reset_index())
 
 summary_df
 ```
 
-This code defines five queries which are then run thirty times for each model+engine combination to obtain a statically significant result. Then the results are aggregated and two numbers are extracted that will inform us of the experiment results.
+This code defines five queries which are then run thirty times for each model+engine combination to obtain a statically significant result. Then the results are aggregated and two numbers are extracted that will inform us of the experiment results. In order to make this a fair competition I had to change ChromaDB and Elasticsearch related code slightly - both of those places were pulling data from pg database because of a mistake I made (saving normalized data to those databases instead of sacing the original data). The "fix" was to comment out that code. Results below:
+
+<img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/vectors-testing1.png" /><br />
 
 ## Summary
+
+It looks like Elasticsearch beats the other two engines by a big margin even without any quantization applied. This comes as a surprise to me because I thought that ChromaDB would shine in this comparison because it's a new product with no legacy code in it (ES has to have it, it's too mature not to have it).
