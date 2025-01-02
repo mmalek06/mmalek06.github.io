@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "Semantic search engines comparison, Part 2 - performance considerations"
-date: 2025-12-29 00:00:00 -0000
+date: 2025-01-02 00:00:00 -0000
 categories: Transformers, Python, Semantic Search, Vector Database
 tags: ["python", "transformers", "semantic search", "chromadb", "milvus", "elasticsearch", "postgresql", "vector database"]
 ---
