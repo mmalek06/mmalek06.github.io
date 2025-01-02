@@ -17,7 +17,7 @@ When I wrote [the last post](https://mmalek06.github.io/linear/algebra/2024/12/2
 1. Compare the engines functionally - how easy it is to index and query them, how many configuration is required to set up the indexes etc.
 2. Check out the offered optimization methods
 
-<b>Side note:</b> I will cover optimization and Milvus in the next post.
+<b>Side note:</b> I will cover optimization in the next post and Milvus in the one after that.
 
 ## The code
 
