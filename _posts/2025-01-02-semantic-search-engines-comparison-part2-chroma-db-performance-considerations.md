@@ -7,7 +7,6 @@ categories:
     - Python
     - Semantic Search
     - Vector Database
-    - RAG
 tags: ["python", "transformers", "semantic search", "chromadb", "milvus", "elasticsearch", "postgresql", "vector database", "rag"]
 ---
 
