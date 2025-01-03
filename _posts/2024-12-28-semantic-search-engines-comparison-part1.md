@@ -7,7 +7,8 @@ categories:
     - Python
     - Semantic Search
     - Vector Database
-tags: ["linear algebra", "transformers", "semantic search", "chromadb", "milvus", "elasticsearch", "postgresql", "ponyorm", "fastapi", "vector database"]
+    - RAG
+tags: ["linear algebra", "transformers", "semantic search", "chromadb", "milvus", "elasticsearch", "postgresql", "ponyorm", "fastapi", "vector database", "rag"]
 ---
 
 # Semantic search engines comparison, Part 1 - ChromaDB, Elasticsearch and PostgreSQL
