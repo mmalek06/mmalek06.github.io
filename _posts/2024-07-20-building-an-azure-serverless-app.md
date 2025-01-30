@@ -5,7 +5,7 @@ date: 2024-07-19 15:00:00 -0000
 categories: 
     - cloud
     - serverless
-    - c#
+    - c-sharp
 tags: ["cloud", "azure", "functions", "azure-function", "c#", "open-api"]
 ---
 
