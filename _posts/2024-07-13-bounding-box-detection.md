@@ -3,8 +3,8 @@ layout: post
 title: "Bounding box detection for HAM10000 dataset"
 date: 2024-07-13 12:00:00 -0000
 categories: 
-    - Python
-    - Computer Vision
+    - python
+    - computer-vision
 tags: ["computer vision", "pytorch", "python", "ai"]
 ---
 

@@ -3,7 +3,7 @@ layout: post
 title: "Similarity scoring in PostgreSQL"
 date: 2024-10-24 00:00:00 -0000
 categories: 
-    - PostgreSQL
+    - postgresql
 tags: ["sql", "levenshtein", "similarity score", "jsonb"]
 ---
 

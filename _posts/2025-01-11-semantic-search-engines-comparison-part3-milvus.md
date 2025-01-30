@@ -3,10 +3,10 @@ layout: post
 title: "Semantic search engines comparison, Part 3 - Milvus"
 date: 2025-01-11 00:00:00 -0000
 categories: 
-    - Transformers
-    - Python
-    - Semantic Search
-    - Vector Database
+    - transformers
+    - python
+    - semantic-search
+    - vector-database
 tags: ["linear algebra", "transformers", "semantic search", "chromadb", "milvus", "elasticsearch", "postgresql", "ponyorm", "fastapi", "vector database", "embedding database", "rag"]
 ---
 

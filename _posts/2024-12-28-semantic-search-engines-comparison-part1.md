@@ -3,10 +3,10 @@ layout: post
 title: "Semantic search engines comparison, Part 1 - ChromaDB, Elasticsearch and PostgreSQL"
 date: 2024-12-28 00:00:00 -0000
 categories: 
-    - Transformers
-    - Python
-    - Semantic Search
-    - Vector Database
+    - transformers
+    - python
+    - semantic-search
+    - vector-database
 tags: ["linear algebra", "transformers", "semantic search", "chromadb", "milvus", "elasticsearch", "postgresql", "ponyorm", "fastapi", "vector database", "embedding database", "rag"]
 ---
 
