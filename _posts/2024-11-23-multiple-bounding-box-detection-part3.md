@@ -12,8 +12,8 @@ tags: ["python", "pytorch", "transfer learning", "computer vision", "math"]
 
 In the previous posts I focused on preparing the training data: 
 
-1. [Here](https://mmalek06.github.io/python/2024/08/04/multiple-bounding-box-detection-part1.html) I data-engineered the full images from the original dataset.
-2. [And here](https://mmalek06.github.io/python/2024/11/02/multiple-bounding-box-detection-part2.html) I run the region proposal algorithm to obtain 224x224 regions to be fed to a network that I will train in this post.
+1. [Here](https://mmalek06.github.io/python/computer-vision/2024/08/04/multiple-bounding-box-detection-part1.html) I data-engineered the full images from the original dataset.
+2. [And here](https://mmalek06.github.io/python/computer-vision/2024/11/02/multiple-bounding-box-detection-part2.html) I run the region proposal algorithm to obtain 224x224 regions to be fed to a network that I will train in this post.
 
 <b>Side note:</b> You may wonder why I didn't choose a more modern network as the backbone of my model, like VisionTransformer or newer architectures. The reason is that I tried to stay true to the original R-CNN architecture, with one exception - they used AlexNet, and I'm using a variation of ResNet, but both are CNNs. Additionally, I'm not very familiar with Vision Transformer architectures yet, so to limit the amount of new information I'd need to take in, I decided to go with something I already know.
 

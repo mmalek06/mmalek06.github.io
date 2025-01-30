@@ -10,7 +10,7 @@ tags: ["cloud", "aws", "terraform", "shell"]
 
 # Provisioning AWS infrastructure for deep learning project
 
-You could say this article is part 2 of [this one](https://mmalek06.github.io/cloud/2024/10/27/provisioning-azure-infrastructure-for-deep-learning-project.html). In that post, I described Azure infrastructure provisioning for my deep learning model training and noted that my original idea was to use AWS infrastructure. However, I had to submit a quota increase request and ended up waiting almost two days for AWS support to process it. Eventually, the request was approved, so now I can give AWS a try.
+You could say this article is part 2 of [this one](https://mmalek06.github.io/cloud/terraform/2024/10/27/provisioning-azure-infrastructure-for-deep-learning-project.html). In that post, I described Azure infrastructure provisioning for my deep learning model training and noted that my original idea was to use AWS infrastructure. However, I had to submit a quota increase request and ended up waiting almost two days for AWS support to process it. Eventually, the request was approved, so now I can give AWS a try.
 
 ## Requirements
 

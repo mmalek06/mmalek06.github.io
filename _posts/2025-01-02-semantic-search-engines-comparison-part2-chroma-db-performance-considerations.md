@@ -12,7 +12,7 @@ tags: ["linear algebra", "transformers", "semantic search", "chromadb", "milvus"
 
 # Semantic search engines comparison, Part 2 - performance considerations
 
-The [last post](https://mmalek06.github.io/transformers,/python,/semantic/search/2024/12/28/semantic-search-engines-comparison-part1.html) got quite long, so I decided that splitting the rest of the series into smaller parts will be both: more readable and easier for me to do. So here it is, a very short post about ChromaDB. I will mention couple of facts from their official documentation for my future reference + make some experiments just for fun.
+The [last post](https://mmalek06.github.io/transformers/python/semantic-search/vector-database/2024/12/28/semantic-search-engines-comparison-part1.html) got quite long, so I decided that splitting the rest of the series into smaller parts will be both: more readable and easier for me to do. So here it is, a very short post about ChromaDB. I will mention couple of facts from their official documentation for my future reference + make some experiments just for fun.
 
 ## ChromaDB - Excerpts from the docs
 
