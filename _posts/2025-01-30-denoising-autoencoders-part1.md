@@ -164,4 +164,36 @@ Skip connections don’t alter the core architecture, as they’re only applied 
 
 It was a good direction but can this be improved further?
 
-As the final upgrade I decided to use `AdamW` + `Lookahead` optimizers combination hoping to squeeze every last bit of accuracy from the model. 
+As the final upgrade I decided to use `AdamW` + `Lookahead` optimizers combination hoping to squeeze every last bit of accuracy from the model:
+
+```python
+criterion = nn.MSELoss()
+base_optimizer = optim.AdamW(model.parameters(), lr=0.001, weight_decay=0.01)
+optimizer = Lookahead(base_optimizer, k=5, alpha=0.5)
+```
+
+<b>Side note:</b> I didn't show it in any of the previous snippets, but I've been using `MSELoss` and `Adam` optimizer so far.
+
+How did I come up with this idea, since using the standard `Adam` optimizer is such a popular choice? Well, at first I tried sticking with it and improving the model itself, but no changes to the layers or the number of neurons would help. I also tried augmenting the dataset itself with this code:
+
+```python
+custom_transform = transforms.Compose([
+    transforms.ToTensor(),
+    transforms.Normalize(mean=dataset_mean, std=dataset_std)
+])
+```
+
+I took a few samples of the images and it looked like most of them are rather grey (mostly images of concrete cracks). However when I dug deep I saw that a substantial amount of them is not like that at all. Some were rather blue, others were almost completely black. Probably with some more data engineering I could have split them into groups and calculate their means and standard deviations within those groups, but I decided to change the angle and search for a simpler solution, so I started looking at the available optimizers. My suspicion was that the model underperforms because with `Adam` it easily settles for local minima (because the images within groups are so similar and some groups are more prevalent than others).
+
+When I sampled a few images, most appeared gray (primarily concrete cracks). However, upon closer inspection, a significant portion looked entirely different - some were blue, while others were nearly black. With more data engineering, I could have grouped them and calculated group-specific means and standard deviations. Instead, I shifted angle and started thinking about using another optimizer. I suspected the model underperformed because Adam caused it to settle in local minima, as images within groups were highly similar and some groups dominated the dataset. To expand on that last sentence: Adam is generally less prone to local minima than non-adaptive optimizers (like SGD without momentum) due to its momentum and adaptive learning rates. However, in cases of low gradient diversity (e.g., repetitive/overrepresented patterns), it can converge too quickly to flat regions. That's basically the case with this dataset. Many images are similar, add on top of that the gaussian noise which also introduces some pattern overrepresentation.
+
+Now, a short explanation of the `Adam` optimizer, and then I'll get to the `AdamW` and `Lookahead` combination. 
+
+`Adam` optimizer is an adaptive algorithm. [This article contains a very good and detailed explanation](https://towardsdatascience.com/why-adamw-matters-736223f31b5d), so I won't repeat that here. I'll just outline the main points:
+
+1. It's adaptive, meaning that it changes the amount by which it updates model's weights by looking at the the second moment which is the average of squared gradients (so it represents the variance of gradients). That means if there's not a lot of variation in the gradients it will allow for bigger steps, and if there's a lot of variation, it will be more careful.
+2. It pushes the model to learn smaller weight values, because it was observed that model with smaller weights generalize better. 
+
+First let's look at the former; And btw. here's [the source of](https://arxiv.org/abs/1711.05101) the `AdamW` idea and here's [a distilled description of it](. I'll try distilling the distilled version even more, so hold on :) 
+
+
