@@ -161,7 +161,7 @@ class DAE(nn.Module):
 
 Skip connections don’t alter the core architecture, as they’re only applied within the `forward` method. The goal here was to combine the flattened raw-input with the final decoder layer. The initial results performed poorly because the latent representation compressed the input too aggressively. A natural question arises: why not increase the bottleneck size? The answer is that doing so risks the network memorizing training patterns, leading to underfitting. But won’t directly adding inputs to the outputs cause overfitting or force the model to memorize noisy data in the final layer? In this case, while it didn’t lead to overfitting, the model began retaining some noise - though it also improved at extracting finer details (with average test MSE across the dataset == 0.0070):
 
-<img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/basic-dae2.png" /><br />
+<img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/basic-dae-2.png" /><br />
 
 It was a good direction but can this be improved further?
 
