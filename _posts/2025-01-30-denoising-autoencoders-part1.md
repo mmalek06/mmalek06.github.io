@@ -18,8 +18,7 @@ In short: it's a neural network that is capable of reconstructing a clean output
 
 A DAE architecture is - on a high level - very similar across models. There's the encoder module, the decoder module and a bottleneck placed inbetween them:
 
-<img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/denoising-autoencoder.png" /><br />
-
+<img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/denoising-autoencoder.png" />
 I intentionally chose a diagram that’s highly generic. As you’ll see, even a seemingly simple architecture can take many forms. However, no matter which variant you select, the core architecture remains consistent with the diagram above: an encoder module that compresses the input into a compact bottleneck layer, followed by a decoder module that reconstructs the original data from this compressed representation. The goal of the encoding process is to force the neural network to learn a latent representation - one that retains only the essential features while discarding noise.
 
 ## The code - baseline
