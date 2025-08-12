@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "Denoising autoencoders, Part 1"
+title: "Denoising autoencoders, Part 1 - basic denoising"
 date: 2025-01-30 00:00:00 -0000
 categories:
     - python
@@ -8,7 +8,7 @@ categories:
 tags: ["python", "pytorch", "transfer learning", "computer vision", "math"]
 ---
 
-# Denoising autoencoders, Part 1
+# Denoising autoencoders, Part 1 - basic denoising
 
 The DAE concept was one of the first things I encountered in deep learning that truly captivated me. A quick Google search will reveal countless articles explaining it, so the topic must be thoroughly covered by now, right? Well, most of what I found were superficial guides - authors limited their examples to the MNIST dataset and used small, simple networks composed purely of dense layers. While this works for grasping the basics, this post dives deeper. I’ve found I learn best with medium-to-hard examples, so for this experiment, I chose a dataset I’ve already been exploring: the crack dataset from my [still-unfinished crack detection series](https://mmalek06.github.io/python/computer-vision/2024/11/23/multiple-bounding-box-detection-part3.html).
 
@@ -196,7 +196,7 @@ To sum it all up and put it in the context of the problem at hand: with `Adam` o
 
 ## The code - CONV-based DAE
 
-Since I exhausted all the dense layers-based option I moved to a CNN architecture.
+Since I exhausted all the basic dense layers-based options, I moved to a CNN architecture.
 
 ```python
 class DAE(nn.Module):
