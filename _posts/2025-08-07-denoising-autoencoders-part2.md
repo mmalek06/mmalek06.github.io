@@ -90,8 +90,8 @@ Before I get to the actual neural network I have to admit that I had literally z
 
 Let's first tackle the positional encoding part. In modern day transformer architectures positional encodings are learned, but since I'm just starting to learn the architecture, I wanted to also get to know all of the original ideas. First the formula:
 
-$$\mathrm{PE}_{(pos,\,2i)}   = \sin\!\left(\frac{pos}{10000^{\frac{2i}{d_{\text{model}}}}}\right),\qquad$$<br />
-$$\mathrm{PE}_{(pos,\,2i+1)} = \cos\!\left(\frac{pos}{10000^{\frac{2i}{d_{\text{model}}}}}\right)$$<br />
+$$\mathrm{PE}_{(pos,\,2i)}   = \sin\!\left(\frac{pos}{10000^{\frac{2i}{d_{\text{model}}}}}\right)\qquad$$<br /><br />
+$$\mathrm{PE}_{(pos,\,2i+1)} = \cos\!\left(\frac{pos}{10000^{\frac{2i}{d_{\text{model}}}}}\right)$$<br /><br />
 $$\quad\text{for } i = 0,1,\dots,\left\lfloor \frac{d_{\text{model}}}{2}\right\rfloor\!-\!1.$$<br />
 
 ```python
