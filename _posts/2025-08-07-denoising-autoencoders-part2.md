@@ -418,3 +418,5 @@ The result is pretty decent: 0.0017 -> 0.0015, however this time I also trained 
 ## Summary
 
 This post certainly doesn't cover all the potential solutions. Especially after reaching a good result with a hybrid ViT + U-Net approach, I think I could squeeze something more out of this architecture, but to be honest, most of what I do here is learn 80% of what's required to be fluent in the technique I'm investigating and leave the remaining 20% for when I have time for more experiments. Therefore, for now, I conclude this two-part series and move on to something else!
+
+<b>Side note</b>: I didn't put any example outputs after denoising because the visual differences were much smaller than the ones visible in [the previous post](https://mmalek06.github.io/python/computer-vision/2025/01/30/denoising-autoencoders-part1.html). Instead, I decided to focus on MSE numbers.
