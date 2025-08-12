@@ -337,7 +337,7 @@ with autocast():
 
 ## The code - the final boss
 
-Even though I think that last architecture could have been the best one if trained with fp32 precision, I decided not to go that route. Instead, I wanted to use transfer learning to see how that would do. Again, I started from the wrong end. At first, I tried something like a U-Net on top of [ViT](https://huggingface.co/docs/transformers/model_doc/vit). I built a network with skip connections between some encoder layers and the ones in the output head, and it was... Horrible!
+Even though I think that last architecture could have been the best one if trained with fp32 precision, I decided not to go that route. Instead, I wanted to use transfer learning to see how that would do. Again, I started from the wrong end. At first, I tried something like a U-Net on top of [ViT](https://huggingface.co/docs/transformers/model_doc/vit). I built a network with skip connections between some encoder layers and the ones in the output head, and it was... Horrible! I'm not even putting that code here, as that would be pointless.
 
 I played with that approach for a bit, but it was another dead end, and being as impatient as I am, I started thinking about calling it a day. However, following my previous trail of thought, I reasoned that since ViT is known to be a good feature extractor and my U-Net did so well, maybe using both is a good idea after all - but I shouldn't use one after the other; instead, I should simply mix their outputs?
 
