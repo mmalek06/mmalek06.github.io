@@ -92,7 +92,7 @@ Let's first tackle the positional encoding part. In modern day transformer archi
 
 $$\mathrm{PE}_{(pos,\,2i)}   = \sin\!\left(\frac{pos}{10000^{\frac{2i}{d_{\text{model}}}}}\right)\qquad$$<br /><br />
 $$\mathrm{PE}_{(pos,\,2i+1)} = \cos\!\left(\frac{pos}{10000^{\frac{2i}{d_{\text{model}}}}}\right)$$<br /><br />
-$$\quad\text{for } i = 0,1,\dots,\left\lfloor \frac{d_{\text{model}}}{2}\right\rfloor\!-\!1.$$<br />
+$$\quad\text{for } i = 0,1,\dots,\left\lfloor \frac{d_{\text{model}}}{2}\right\rfloor\!-\!1$$<br />
 
 ```python
 class OptimizedPositionalEncoding(torch.nn.Module):
