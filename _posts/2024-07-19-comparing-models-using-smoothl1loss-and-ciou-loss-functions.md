@@ -5,7 +5,7 @@ date: 2024-07-19 10:00:00 -0000
 categories: 
     - python
     - computer-vision
-tags: ["computer vision", "pytorch", "python", "ai", "math", "ciou", "smoothl1"]
+tags: ["computer vision", "pytorch", "python", "math", "ciou", "smoothl1"]
 ---
 
 # Comparing models using SmoothL1Loss and CIoU loss functions

@@ -6,7 +6,7 @@ categories:
     - Python
     - Spark
     - Statistics
-tags: ["python", spark", "scipy", "testing"]
+tags: ["python", "spark", "scipy", "testing"]
 ---
 
 # Detecting Conformance to Benford's Law Using Apache Spark
