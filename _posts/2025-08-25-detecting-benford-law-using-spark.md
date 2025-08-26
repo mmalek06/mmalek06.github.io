@@ -144,7 +144,6 @@ def generate_benford_values(n_days: int = 365 * 4) -> list[int]:
 `generate_biased_values` produces values from a lognormal distribution 70% of the time, and 30% of the time it overrepresents certain numbers. The magnitude calculations are there only to make the overall number range more spread out, but it could just as well be simplified to use a fixed range (like in the `generate_uniform_values` function).
 
 This is how the biased distribution can look like:
-
 <br />
 <img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/biased_distribution.png" /><br />
 
