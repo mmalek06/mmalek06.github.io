@@ -19,7 +19,7 @@ Why Apache Spark and not Pandas? The reason is simple - laziness. I already had 
 
 ## WTH is Benford's Law?!
 
-First, some theory. Benford's Law states that if you take the first digit from each number in a series, the digits should appear with certain precalculated probabilities. For example, the digit 1 should appear about 30% of the time, digit 2 about 17.5%, all the way up to digit 9, which according to Benford's Law should appear only around 4.5% of the time. This corresponds to the Benford distribution known in statistics. . It's represented by this formula:
+First, some theory. Benford's Law states that if you take the first digit from each number in a series, the digits should appear with certain precalculated probabilities. For example, the digit 1 should appear about 30% of the time, digit 2 about 17.5%, all the way up to digit 9, which according to Benford's Law should appear only around 4.5% of the time. This corresponds to the Benford distribution known in statistics. It's represented by this formula:
 
 $$\begin{aligned}
 P(d) = \log_{10}\left(1 + \frac{1}{d}\right), \quad d = 1, 2, \dots, 9
@@ -29,7 +29,7 @@ And looks like this:
 <br />
 <img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/benford_distribution.png" /><br />
 
-Values for that plot can be generated using this function:
+It shows a plot generated off of values produced by this function:
 
 ```python
 def generate_benford_values(n_days: int = 365 * 4) -> list[int]:
@@ -292,6 +292,8 @@ This is the entry point of my logic. First, it gets the initial dataframe - whil
 
 <b>Side note</b>: before I describe the next method, an important remark: this code assumes there's data only for a single entity - be it a bank account, medical study, or something else. However, it would work if there were multiple such entities in which case the grouping would have to be done by some unique identifier of that entity.
 
+#### Creating the initial dataframe
+
 ```python
 def _get_analysis_df(self, df: DataFrame) -> DataFrame:
     logger.info("Running Benford analysis...")
@@ -331,25 +333,18 @@ def _get_analysis_df(self, df: DataFrame) -> DataFrame:
         [(k, float(v)) for k, v in benford_probs.items()],
         [_Columns.DIGIT, _Columns.EXPECTED]
     )
-    digit_counts = (
+    pivoted_counts = (
         df
-        .groupBy(_Columns.QUARTERS_FROM_END, _Columns.FIRST_DIGIT)
+        .groupBy(_Columns.QUARTERS_FROM_END)
+        .pivot(_Columns.FIRST_DIGIT, [str(i) for i in range(1, 10)])
         .count()
-        .withColumnRenamed(_Columns.FIRST_DIGIT, _Columns.DIGIT)
-    ).cache()
-    distinct_groups = digit_counts.select(_Columns.QUARTERS_FROM_END).distinct()
-    digits_df = benford_df.select(_Columns.DIGIT)
-    all_combinations = distinct_groups.crossJoin(digits_df)
-    full_digit_counts = (
-        all_combinations
-        .join(
-            digit_counts,
-            [_Columns.QUARTERS_FROM_END, _Columns.DIGIT],
-            "left"
-        )
-        .na.fill({_Columns.COUNT: 0})
-        .cache()
+        .na.fill(0)
     )
+    full_digit_counts = pivoted_counts.select(
+        _Columns.QUARTERS_FROM_END,
+        F.expr(
+            f"stack(9, '1', `1`, '2', `2`, '3', `3`, '4', `4`, '5', `5`, '6', `6`, '7', `7`, '8', `8`, '9', `9`) as ({_Columns.DIGIT}, {_Columns.COUNT})")
+    ).cache()
     total_counts = full_digit_counts.groupBy(_Columns.QUARTERS_FROM_END).agg(
         F.sum(_Columns.COUNT).alias(_Columns.TOTAL)
     )
@@ -362,13 +357,14 @@ def _get_analysis_df(self, df: DataFrame) -> DataFrame:
                     (F.col(_Columns.COUNT) - F.col(_Columns.EXPECTED_COUNT)) ** 2 / F.col(_Columns.EXPECTED_COUNT))
     )
 
-    digit_counts.unpersist()
     full_digit_counts.unpersist()
 
     return analysis_df
 ```
 
-Now this is where things start to get interesting. The second line sets a constant `MIN_QUARTERS`. In the beginning of this post I mentioned this all comes from one of my passion projects. In that project I assumed I will check the data while bucketing it into calendar quarters, to also see if there's a seasonality in the numbers. And so, the first `df = (` expression does just that - it calculates where in the "quarter" space is the given datapoint with this part:
+Now this is where things start to get interesting. Btw. that's the full method in case you'd like to understand it without my explanations.
+
+Anysways, the second line sets a constant `MIN_QUARTERS`. In the beginning of this post I mentioned this all comes from one of my passion projects. In that project I assumed I will check the data while bucketing it into calendar quarters, to also see if there's a seasonality in the numbers. And so, the first `df = (` expression does just that - it calculates where in the "quarter" space is the given datapoint with this part:
 
 ```python
 (F.col(_Columns.END_YEAR) - F.col(_Columns.CURRENT_YEAR)) * 4 +
@@ -382,7 +378,7 @@ It first considers the year of the datapoint - if it's the current one, it will 
             F.expr(r"regexp_extract(cast(abs(volume) as string), '([^0.])', 1)"))
 ```
 
-I guess this is rather self-explanatory - it just pulls the first digit from the number for later analysis (and it's actually the core expression in this whole code :D). The next part checks if there's enough data to perform the analysis and returns an empty dataframe in case there's not. Moving on:
+I guess this is rather self-explanatory - it just pulls the first digit from the number for later analysis (and it's actually the core expression in this whole code :D). The next part checks if there's enough data to perform the analysis and returns an empty dataframe in case there's not. Moving on to the part after that:
 
 ```python
 benford_probs = {str(d): np.log10(1 + 1 / d) for d in range(1, 10)}
@@ -392,4 +388,45 @@ benford_df = self._spark.createDataFrame(
 )
 ```
 
-This part creates the distribution described in the "WTH is Benford's Law?!" section and creates a dataframe holding it.
+This code creates the distribution described in the "WTH is Benford's Law?!" section and creates a dataframe holding it.
+
+The fragment that follows does the following:
+
+1. It groups the data by the quarter info and creates a pivot table where columns are the first digits - in case some digit is missing, it will be present because of that second method argument. So after pivoting, the data could look like this:
+
+```text
+quarters_from_end | 1  | 2    | 3  | 4    | 5    | 6    | 7    | 8 | 9    
+1                 | 50 | 30   | 20 | null | null | null | null | 8 | null
+2                 | 45 | null | 25 | null | null | null | null | 0 | 6
+```
+
+And after the `.na.fill(0)` call it could look like this:
+
+```text
+quarters_from_end | 1  | 2 | 3  | 4 | 5 | 6 | 7 | 8 | 9
+1                 | 50 | 30| 20 | 0 | 0 | 0 | 0 | 8 | 0
+2                 | 45 | 0 | 25 | 0 | 0 | 0 | 0 | 0 | 6
+```
+
+2. The next call unpivots the data. The `stack` Spark function call looks weird, but its interface is this: 
+
+```sql
+stack(n, 'label1', take_value_from_col_no1, 'label2', take_value_from_col_no2, ..., 'labeln', take_value_from_col_no_n)
+```
+
+So the exact expression that I used says:
+
+- Create 9 rows from each input row
+- Row 1: digit='1', count=value from column 1
+- Row 2: digit='2', count=value from column 2
+- Row 3: digit='3', count=value from column 3
+- ...and so on
+
+There is at least a few other ways of achieving the same goal. E.g. I could have used a cross join between quarters and first digits, and join that dataframe with another one that would group by quarters from end and first digit, and finally fill the missing rows with 0's, but that's just more work, so... Pivot tables FTW!
+
+3. `total_counts` df just sums all the datapoints within each quarter.
+4. `analysis_df` joins `total_counts` and `benford_df`, and calculates the absolute number of occurrences we should expect for each digit in each quarter. Then it uses that in the chi square formula to obtain the final result.
+
+#### Calculating the remaining chi square elements
+
+No statystical analysis would be complete without calculating p-values and this one is no different:
