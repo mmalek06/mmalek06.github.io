@@ -196,7 +196,7 @@ spark_session = MockSharedSparkSession()
 
 @pytest.fixture
 def sut():
-    return BenfordAnalysisCommand(spark_session)
+    return BenfordAnalysis(spark_session)
 
 
 def create_data_frame(volumes: list[int]) -> DataFrame:
@@ -238,27 +238,158 @@ def create_data_frame(volumes: list[int]) -> DataFrame:
 @pytest.mark.parametrize(
     "data_frame,expected_label",
     [
-        (create_data_frame(generate_uniform_volumes()), ticker, "high"),
-        (create_data_frame(generate_biased_volumes()), ticker, "high"),
-        (create_data_frame(generate_lognormal_volumes()), ticker, "high"),
-        (create_data_frame(generate_benford_volumes()), ticker, "low"),
+        (create_data_frame(generate_uniform_values()), "high"),
+        (create_data_frame(generate_biased_values()), "high"),
+        (create_data_frame(generate_lognormal_values()), "high"),
+        (create_data_frame(generate_benford_values()), "low"),
     ]
 )
 def test_benford_analysis_command_threshold(
-        sut: BenfordAnalysisCommand,
+        sut: BenfordAnalysis,
         data_frame: DataFrame,
         expected_label: str,
         monkeypatch
 ):
-    monkeypatch.setattr(sut, "_get_df_", lambda t: data_frame)
+    monkeypatch.setattr(sut, "_get_initial_df", lambda t: data_frame)
 
-    result = sut.run(ticker)
+    result = sut.run()
     chi_series = result[0]["chi_sq_series"]
     chi_stat = float(chi_series[0])
 
     if expected_label == "high":
-        assert chi_stat > 15, f"Chi-square {chi_stat} unexpectedly low for {ticker.code}"
+        assert chi_stat > 15, f"Chi-square {chi_stat} unexpectedly low"
     else:
-        assert chi_stat < 15, f"Chi-square {chi_stat} unexpectedly high for {ticker.code}"
+        assert chi_stat < 15, f"Chi-square {chi_stat} unexpectedly high"
 
 ```
+
+A rather simple unit test - it generates three distributions that are different from Benford's and one that actually is the Benford distribution. In the beginning I was tempted to compare the `chi_stat` to some actual numbers (using margins), since it will be of different value for each of the parameters, but given the partially random nature of the `generate_*_values` functions, it would be very hard to find a good range that wouldn't cause the test to fail from time to time. 
+
+## The code
+
+The code is rather involved - it's a bunch of pyspark queries, so I'll describe the `BenfordAnalysis` class method by method.
+
+```python
+def run(self) -> dict[str, str | int | float]:
+    initial_df = self._get_initial_df()
+
+    logger.info(f"Intraday count is: {initial_df.count()}")
+
+    analysis_df = self._get_analysis_df(initial_df)
+
+    logger.info(f"Analysis count is: {analysis_df.count()}")
+
+    mostly_decreasing_generalized = BenfordAnalysisCommand._get_chi_squared_results(analysis_df)
+
+    logger.info(f"CHI-squared count is: {mostly_decreasing_generalized.count()}")
+
+    result = mostly_decreasing_generalized.toPandas().to_dict(orient="records")
+
+    return result[0]
+```
+
+This is the entry point of my logic. First, it gets the initial dataframe - while doing that, one of the dataframes passed in as parameters to the test is used. Then it runs the analysis method, which extracts the first digits (among other things), and after that another method takes care of the chi-square calculation. I'm not showing the `_get_initial_df` method because it simply selects the data. 
+
+<b>Side note</b>: before I describe the next method, an important remark: this code assumes there's data only for a single entity - be it a bank account, medical study, or something else. However, it would work if there were multiple such entities in which case the grouping would have to be done by some unique identifier of that entity.
+
+```python
+    def _get_analysis_df(self, df: DataFrame) -> DataFrame:
+        logger.info("Running Benford analysis...")
+
+        MIN_QUARTERS = 4
+        now = datetime.datetime.now(datetime.UTC)
+        df = (
+            df
+            .withColumn(_Columns.CURRENT_YEAR, F.year(_Columns.DATETIME_))
+            .withColumn(_Columns.CURRENT_QUARTER, F.quarter(_Columns.DATETIME_))
+            .withColumn(_Columns.END_YEAR, F.year(F.lit(now)))
+            .withColumn(_Columns.END_QUARTER, F.quarter(F.lit(now)))
+            .withColumn(
+                _Columns.QUARTERS_FROM_END,
+                (F.col(_Columns.END_YEAR) - F.col(_Columns.CURRENT_YEAR)) * 4 +
+                (F.col(_Columns.END_QUARTER) - F.col(_Columns.CURRENT_QUARTER))
+            )
+            .withColumn(_Columns.FIRST_DIGIT,
+                        F.expr(r"regexp_extract(cast(abs(volume) as string), '([^0.])', 1)"))
+        )
+        num_quarters = (
+            df
+            .select(F.countDistinct(_Columns.QUARTERS_FROM_END).alias("cnt"))
+            .first()["cnt"]
+        )
+
+        if num_quarters < MIN_QUARTERS:
+            logger.warning(f"Data has fewer than {MIN_QUARTERS} quarters, returning empty DataFrame")
+
+            return self._spark.createDataFrame([], schema=[
+                _Columns.QUARTERS_FROM_END, _Columns.DIGIT, _Columns.COUNT, _Columns.TOTAL,
+                _Columns.EXPECTED, _Columns.EXPECTED_COUNT, _Columns.CHI_SQ_TERM
+            ])
+
+        benford_probs = {str(d): np.log10(1 + 1 / d) for d in range(1, 10)}
+        benford_df = self._spark.createDataFrame(
+            [(k, float(v)) for k, v in benford_probs.items()],
+            [_Columns.DIGIT, _Columns.EXPECTED]
+        )
+        digit_counts = (
+            df
+            .groupBy(_Columns.QUARTERS_FROM_END, _Columns.FIRST_DIGIT)
+            .count()
+            .withColumnRenamed(_Columns.FIRST_DIGIT, _Columns.DIGIT)
+        ).cache()
+        distinct_groups = digit_counts.select(_Columns.QUARTERS_FROM_END).distinct()
+        digits_df = benford_df.select(_Columns.DIGIT)
+        all_combinations = distinct_groups.crossJoin(digits_df)
+        full_digit_counts = (
+            all_combinations
+            .join(
+                digit_counts,
+                [_Columns.QUARTERS_FROM_END, _Columns.DIGIT],
+                "left"
+            )
+            .na.fill({_Columns.COUNT: 0})
+            .cache()
+        )
+        total_counts = full_digit_counts.groupBy(_Columns.QUARTERS_FROM_END).agg(
+            F.sum(_Columns.COUNT).alias(_Columns.TOTAL)
+        )
+        analysis_df = (
+            full_digit_counts
+            .join(total_counts, [_Columns.QUARTERS_FROM_END])
+            .join(benford_df, _Columns.DIGIT)
+            .withColumn(_Columns.EXPECTED_COUNT, F.col(_Columns.EXPECTED) * F.col(_Columns.TOTAL))
+            .withColumn(_Columns.CHI_SQ_TERM,
+                        (F.col(_Columns.COUNT) - F.col(_Columns.EXPECTED_COUNT)) ** 2 / F.col(_Columns.EXPECTED_COUNT))
+        )
+
+        digit_counts.unpersist()
+        full_digit_counts.unpersist()
+
+        return analysis_df
+```
+
+Now this is where things start to get interesting. The second line sets a constant `MIN_QUARTERS`. In the beginning of this post I mentioned this all comes from one of my passion projects. In that project I assumed I will check the data while bucketing it into calendar quarters, to also see if there's a seasonality in the numbers. And so, the first `df = (` expression does just that - it calculates where in the "quarter" space is the given datapoint with this part:
+
+```python
+(F.col(_Columns.END_YEAR) - F.col(_Columns.CURRENT_YEAR)) * 4 +
+(F.col(_Columns.END_QUARTER) - F.col(_Columns.CURRENT_QUARTER))
+```
+
+It first considers the year of the datapoint - if it's the current one, it will be `0 * 4 = 0` - and then adds the number of quarters from the one we're currently in. So if it's August, we're in the third quarter of the year, and if the datapoint comes from January, that calculation will give us `3 - 1 = 2`, meaning the considered quarter is two quarters away from the current one. What this does is assign a unique "quarters from end" label. For example, if it's December 2025, data from this month will fall into bucket #0, and data from December 2024 will fall into bucket #4.
+
+```python
+.withColumn(_Columns.FIRST_DIGIT,
+            F.expr(r"regexp_extract(cast(abs(volume) as string), '([^0.])', 1)"))
+```
+
+I guess this is rather self-explanatory - it just pulls the first digit from the number for later analysis (and it's actually the core expression in this whole code :D). The next part checks if there's enough data to perform the analysis and returns an empty dataframe in case there's not. Moving on:
+
+```python
+benford_probs = {str(d): np.log10(1 + 1 / d) for d in range(1, 10)}
+benford_df = self._spark.createDataFrame(
+    [(k, float(v)) for k, v in benford_probs.items()],
+    [_Columns.DIGIT, _Columns.EXPECTED]
+)
+```
+
+This part creates the distribution described in the "WTH is Benford's Law?!" section and creates a dataframe holding it.
