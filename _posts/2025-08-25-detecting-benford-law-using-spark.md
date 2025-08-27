@@ -293,79 +293,79 @@ This is the entry point of my logic. First, it gets the initial dataframe - whil
 <b>Side note</b>: before I describe the next method, an important remark: this code assumes there's data only for a single entity - be it a bank account, medical study, or something else. However, it would work if there were multiple such entities in which case the grouping would have to be done by some unique identifier of that entity.
 
 ```python
-    def _get_analysis_df(self, df: DataFrame) -> DataFrame:
-        logger.info("Running Benford analysis...")
+def _get_analysis_df(self, df: DataFrame) -> DataFrame:
+    logger.info("Running Benford analysis...")
 
-        MIN_QUARTERS = 4
-        now = datetime.datetime.now(datetime.UTC)
-        df = (
-            df
-            .withColumn(_Columns.CURRENT_YEAR, F.year(_Columns.DATETIME_))
-            .withColumn(_Columns.CURRENT_QUARTER, F.quarter(_Columns.DATETIME_))
-            .withColumn(_Columns.END_YEAR, F.year(F.lit(now)))
-            .withColumn(_Columns.END_QUARTER, F.quarter(F.lit(now)))
-            .withColumn(
-                _Columns.QUARTERS_FROM_END,
-                (F.col(_Columns.END_YEAR) - F.col(_Columns.CURRENT_YEAR)) * 4 +
-                (F.col(_Columns.END_QUARTER) - F.col(_Columns.CURRENT_QUARTER))
-            )
-            .withColumn(_Columns.FIRST_DIGIT,
-                        F.expr(r"regexp_extract(cast(abs(volume) as string), '([^0.])', 1)"))
+    MIN_QUARTERS = 4
+    now = datetime.datetime.now(datetime.UTC)
+    df = (
+        df
+        .withColumn(_Columns.CURRENT_YEAR, F.year(_Columns.DATETIME_))
+        .withColumn(_Columns.CURRENT_QUARTER, F.quarter(_Columns.DATETIME_))
+        .withColumn(_Columns.END_YEAR, F.year(F.lit(now)))
+        .withColumn(_Columns.END_QUARTER, F.quarter(F.lit(now)))
+        .withColumn(
+            _Columns.QUARTERS_FROM_END,
+            (F.col(_Columns.END_YEAR) - F.col(_Columns.CURRENT_YEAR)) * 4 +
+            (F.col(_Columns.END_QUARTER) - F.col(_Columns.CURRENT_QUARTER))
         )
-        num_quarters = (
-            df
-            .select(F.countDistinct(_Columns.QUARTERS_FROM_END).alias("cnt"))
-            .first()["cnt"]
-        )
+        .withColumn(_Columns.FIRST_DIGIT,
+                    F.expr(r"regexp_extract(cast(abs(volume) as string), '([^0.])', 1)"))
+    )
+    num_quarters = (
+        df
+        .select(F.countDistinct(_Columns.QUARTERS_FROM_END).alias("cnt"))
+        .first()["cnt"]
+    )
 
-        if num_quarters < MIN_QUARTERS:
-            logger.warning(f"Data has fewer than {MIN_QUARTERS} quarters, returning empty DataFrame")
+    if num_quarters < MIN_QUARTERS:
+        logger.warning(f"Data has fewer than {MIN_QUARTERS} quarters, returning empty DataFrame")
 
-            return self._spark.createDataFrame([], schema=[
-                _Columns.QUARTERS_FROM_END, _Columns.DIGIT, _Columns.COUNT, _Columns.TOTAL,
-                _Columns.EXPECTED, _Columns.EXPECTED_COUNT, _Columns.CHI_SQ_TERM
-            ])
+        return self._spark.createDataFrame([], schema=[
+            _Columns.QUARTERS_FROM_END, _Columns.DIGIT, _Columns.COUNT, _Columns.TOTAL,
+            _Columns.EXPECTED, _Columns.EXPECTED_COUNT, _Columns.CHI_SQ_TERM
+        ])
 
-        benford_probs = {str(d): np.log10(1 + 1 / d) for d in range(1, 10)}
-        benford_df = self._spark.createDataFrame(
-            [(k, float(v)) for k, v in benford_probs.items()],
-            [_Columns.DIGIT, _Columns.EXPECTED]
+    benford_probs = {str(d): np.log10(1 + 1 / d) for d in range(1, 10)}
+    benford_df = self._spark.createDataFrame(
+        [(k, float(v)) for k, v in benford_probs.items()],
+        [_Columns.DIGIT, _Columns.EXPECTED]
+    )
+    digit_counts = (
+        df
+        .groupBy(_Columns.QUARTERS_FROM_END, _Columns.FIRST_DIGIT)
+        .count()
+        .withColumnRenamed(_Columns.FIRST_DIGIT, _Columns.DIGIT)
+    ).cache()
+    distinct_groups = digit_counts.select(_Columns.QUARTERS_FROM_END).distinct()
+    digits_df = benford_df.select(_Columns.DIGIT)
+    all_combinations = distinct_groups.crossJoin(digits_df)
+    full_digit_counts = (
+        all_combinations
+        .join(
+            digit_counts,
+            [_Columns.QUARTERS_FROM_END, _Columns.DIGIT],
+            "left"
         )
-        digit_counts = (
-            df
-            .groupBy(_Columns.QUARTERS_FROM_END, _Columns.FIRST_DIGIT)
-            .count()
-            .withColumnRenamed(_Columns.FIRST_DIGIT, _Columns.DIGIT)
-        ).cache()
-        distinct_groups = digit_counts.select(_Columns.QUARTERS_FROM_END).distinct()
-        digits_df = benford_df.select(_Columns.DIGIT)
-        all_combinations = distinct_groups.crossJoin(digits_df)
-        full_digit_counts = (
-            all_combinations
-            .join(
-                digit_counts,
-                [_Columns.QUARTERS_FROM_END, _Columns.DIGIT],
-                "left"
-            )
-            .na.fill({_Columns.COUNT: 0})
-            .cache()
-        )
-        total_counts = full_digit_counts.groupBy(_Columns.QUARTERS_FROM_END).agg(
-            F.sum(_Columns.COUNT).alias(_Columns.TOTAL)
-        )
-        analysis_df = (
-            full_digit_counts
-            .join(total_counts, [_Columns.QUARTERS_FROM_END])
-            .join(benford_df, _Columns.DIGIT)
-            .withColumn(_Columns.EXPECTED_COUNT, F.col(_Columns.EXPECTED) * F.col(_Columns.TOTAL))
-            .withColumn(_Columns.CHI_SQ_TERM,
-                        (F.col(_Columns.COUNT) - F.col(_Columns.EXPECTED_COUNT)) ** 2 / F.col(_Columns.EXPECTED_COUNT))
-        )
+        .na.fill({_Columns.COUNT: 0})
+        .cache()
+    )
+    total_counts = full_digit_counts.groupBy(_Columns.QUARTERS_FROM_END).agg(
+        F.sum(_Columns.COUNT).alias(_Columns.TOTAL)
+    )
+    analysis_df = (
+        full_digit_counts
+        .join(total_counts, [_Columns.QUARTERS_FROM_END])
+        .join(benford_df, _Columns.DIGIT)
+        .withColumn(_Columns.EXPECTED_COUNT, F.col(_Columns.EXPECTED) * F.col(_Columns.TOTAL))
+        .withColumn(_Columns.CHI_SQ_TERM,
+                    (F.col(_Columns.COUNT) - F.col(_Columns.EXPECTED_COUNT)) ** 2 / F.col(_Columns.EXPECTED_COUNT))
+    )
 
-        digit_counts.unpersist()
-        full_digit_counts.unpersist()
+    digit_counts.unpersist()
+    full_digit_counts.unpersist()
 
-        return analysis_df
+    return analysis_df
 ```
 
 Now this is where things start to get interesting. The second line sets a constant `MIN_QUARTERS`. In the beginning of this post I mentioned this all comes from one of my passion projects. In that project I assumed I will check the data while bucketing it into calendar quarters, to also see if there's a seasonality in the numbers. And so, the first `df = (` expression does just that - it calculates where in the "quarter" space is the given datapoint with this part:
