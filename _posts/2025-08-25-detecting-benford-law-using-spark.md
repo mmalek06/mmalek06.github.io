@@ -279,11 +279,11 @@ def run(self) -> dict[str, str | int | float]:
 
     logger.info(f"Analysis count is: {analysis_df.count()}")
 
-    mostly_decreasing_generalized = BenfordAnalysisCommand._get_chi_squared_results(analysis_df)
+    problematic_results = BenfordAnalysisCommand._get_problematic_results(analysis_df)
 
-    logger.info(f"CHI-squared count is: {mostly_decreasing_generalized.count()}")
+    logger.info(f"CHI-squared count is: {problematic_results.count()}")
 
-    result = mostly_decreasing_generalized.toPandas().to_dict(orient="records")
+    result = problematic_results.toPandas().to_dict(orient="records")
 
     return result[0]
 ```
@@ -293,6 +293,8 @@ This is the entry point of my logic. First, it gets the initial dataframe - whil
 <b>Side note</b>: before I describe the next method, an important remark: this code assumes there's data only for a single entity - be it a bank account, medical study, or something else. However, it would work if there were multiple such entities in which case the grouping would have to be done by some unique identifier of that entity.
 
 #### Creating the initial dataframe
+
+A word of introduction: a lot of this code is just a quirk of my implementation. Splitting the data into quarters, then downweighting p-values based on their recency - obviously you could do just fine without them, it's just what I needed in my app. I also decided to not simplify those parts because they don't add a lot of mental overhead, while at the same time they just seem interesting (to me ;) ). Back to the code:
 
 ```python
 def _get_analysis_df(self, df: DataFrame) -> DataFrame:
@@ -429,4 +431,69 @@ There is at least a few other ways of achieving the same goal. E.g. I could have
 
 #### Calculating the remaining chi square elements
 
-No statystical analysis would be complete without calculating p-values and this one is no different:
+No statystical analysis would be complete without calculating p-values and this one is no different. For that I created this udf to be used in a method I'll show next:
+
+```python
+@udf(returnType=DoubleType())
+def chi2_pvalue(chi_sq_stat):
+    return float(1 - chi2.cdf(chi_sq_stat, df=8))
+```
+
+It uses the `scipy`'s chi2 function to obtain p-value from the previously calculated chi-square statistic. It's then used as the input to another udf:
+
+```python
+@udf(returnType=FloatType())
+def compute_weighted_deviation_confidence(p_values):
+    if len(p_values) == 0:
+        return 0.0
+
+    total_weight = 0.0
+    deviation_weight = 0.0
+
+    for i, p_value in enumerate(p_values):
+        weight = 0.8 ** i
+        total_weight += weight
+
+        if p_value < 0.05:
+            deviation_weight += weight
+
+    return deviation_weight / total_weight if total_weight > 0 else 0.0
+```
+
+What it does, is it looks at the p-values and downweights them based on recency and returns a confidence score which is just the averaged deviation sum. These two udfs are used in a method that wraps-up the whole logic of benford analysis:
+
+```python
+def _get_problematic_results(analysis_df: DataFrame) -> DataFrame:
+    chi_sq_results = (
+        analysis_df
+        .groupBy(_Columns.QUARTERS_FROM_END)
+        .agg(F.sum(_Columns.CHI_SQ_TERM).alias(_Columns.CHI_SQ_STATISTIC))
+        .withColumn("p_value", chi2_pvalue(_Columns.CHI_SQ_STATISTIC))
+        .withColumn("significant_05", F.col("p_value") < 0.05)
+    )
+    ordered = chi_sq_results.orderBy(F.col(_Columns.QUARTERS_FROM_END).desc())
+    chi_sq_series = (
+        ordered
+        .agg(
+            F.collect_list(_Columns.CHI_SQ_STATISTIC).alias(_Columns.CHI_SQ_SERIES),
+            F.collect_list("p_value").alias("p_value_series")
+        )
+    )
+    deviation_scores = (
+        chi_sq_series
+        .withColumn(_Columns.DEVIATION_CONFIDENCE,
+                    compute_weighted_deviation_confidence("p_value_series", _Columns.CHI_SQ_SERIES))
+        .withColumn("n_quarters", F.size(_Columns.CHI_SQ_SERIES))
+    )
+    likely_problematic = deviation_scores.filter(
+        F.col(_Columns.DEVIATION_CONFIDENCE) >= F.lit(0.5))
+    )
+
+    return likely_problematic
+```
+
+This time all the magic was residing in the udf and this function simply returns a dataframe that is filtered by the confidence score. If the p-value was small enough, then the null hypothesis was rejected for that quarter (null hypothesis being: the data follows Benford's Law for that quarter). Btw. that `filter` call is yet another quirk of my code. In other case it could be useful to actually show all the results.
+
+## Summary
+
+I'm tempted to write a similar post about doing the same in Pandas, just as a practice. It took me some time to understand my old code anew and in the end I was missing AI topics, so the next post will probably come back to that subject. I hope you enjoyed!
