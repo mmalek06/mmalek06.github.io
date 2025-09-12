@@ -1,7 +1,7 @@
 ---
 layout: post
-title: "Denoising autoencoders, Part 2 - improving the denoising quality with a custom loss function"
-date: 2025-08-07 00:00:00 -0000
+title: "Denoising autoencoders, Part 3 - improving the denoising quality with a custom loss function"
+date: 2025-09-12 00:00:00 -0000
 categories:
     - python
     - computer-vision
