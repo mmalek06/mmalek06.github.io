@@ -10,7 +10,7 @@ tags: ["python", "pytorch", "transfer learning", "computer vision", "transformer
 
 # Denoising autoencoders, Part 2 - improving the denoising quality with a custom loss function
 
-In the previous post, I said I probably wouldn't come back to this topic soon, but I couldn't stop thinking that this series wouldn't be complete until I investigated how my final architecture "thinks" and, depending on what I saw, whether there might still be some low-hanging fruit to harvest in this project. So I arrived at the idea of using the `pytorch-grad-cam` library to see what activates my network, which in turn guided my next steps.
+In the previous post, I said I probably wouldn't come back to this topic soon, but I couldn't stop thinking that this series wouldn't be complete until I investigated how my final architecture "thinks" and, depending on what I saw, whether there might still be some low-hanging fruit to harvest in this project. Also, when I zoomed in on the denoised images, it became clear than they are blurry - so of them REALLY blurry. Could something be done with that? ...And so I arrived at the idea of using the `pytorch-grad-cam` library to see what activates my network, which in turn guided my next steps.
 
 ## So... WHAT IS THAT?!
 
@@ -121,15 +121,104 @@ I gotta be honest - I cherry-picked this example, because most of the other imag
 <img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/eigen_map_vs_kpca_map2.png" />
 <br />
 
-They are not as bright, and not complementary anymore. Also, it seems that the autoencoder didn't really pay attention to the cracks.
+They are not as bright, and not complementary anymore. Also, it seems that the U-Net didn't really pay attention to the cracks.
 
-This is the moment that I finished my visual analysis and summed it up with:
-"Ok, so ViT attends to the fragments that show cracks, then the CNN module tunes those features down. Is that good or bad? Well, the task was to denoise the images, not denoise the cracks and even though this is kind of weird, the overall process makes the result better. But what would happen if I push the network to focus on the features that ViT was activated by the most?"
+This is the moment when I finished my visual analysis and summed it up with:
+Okay, so ViT attends to the fragments that show cracks, and then the CNN module tones those features down. Is that good or bad? Well, the task was to denoise the images, not to denoise the cracks, and even though this is kind of weird, the overall process makes the result better (ViT + U-Net did a much better job than any other variation I tried). But what would happen if I pushed the network to focus on the features that activated ViT the most? That wouldn't work. Some cracks are very small, so focusing on them could potentially make images better in the regions they occupy, but perhaps worse in the remaining ones. Hmm... But what if I focused on the edges? The images in my dataset are basically textures - asphalt, concrete, sand-like stuff, etc. There are visible edges between cracks and the other parts, but also between different elements of the images. For example, there are some stone-like pieces on top of sand; also, the asphalt material isn't all black. Could focusing on that give some kind of visual quality boost?
 
-## The code - focusing on ViT features
+## The code - dealing with edges
 
-After I scrolled through several images it became clear that ViT attends to cracks, but what makes them so special? Considering them on atomic level, the image regions where the cracks are present stand out because of different coloring. So what if I could incorporate a loss function component just for that? I couldn't find a loss function that would represent that idea (however, I didn't really search for it thoroughly :) ), but I figured that I could write one myself. Another learning oportunity.
+That's how I arrived at the idea of a custom loss function that would penalize color differences between different colored regions. Cracks stand out from what they are on, stones look different from the material they are on, those small grains of whatever that asphalt surfaces have also differ from the rest of the texture.
+
+But before I get to that, a word of explanation about the intuition I learned for MSE loss:
+In the introduction I mentioned the blurriness problem that occurs with MSE loss during training. MSE computes the mean squared difference between predictions and targets, but the optimization process creates a bias toward conservative predictions. When there's uncertainty about the correct pixel value - such as when reconstructing details from noisy images - MSE's squared penalty makes the network risk-averse. Instead of making bold predictions that might occasionally be very wrong, the network learns to predict 'safe' values that minimize the worst-case squared error.
+This leads to predictions that approximate the mean of possible target values. For example, if a pixel could reasonably be either 3 or 12 depending on the true underlying detail, MSE encourages the network to predict something closer to 7 or 8 - a compromise that keeps the squared error relatively low regardless of which value is actually correct. While this minimizes the loss function, it produces smooth, averaged-looking results.
+This optimization behavior, is what causes the blurriness and color desaturation we observe in MSE-trained denoising networks. Some of them, at least, or rather: trained by me ;)
+
+Coming back to the code - I decided to create a variable that would hold windowed (with overlaps) color difference scores in a form of a dictionary. Why windowed? Well, color difference scores on full images would be rather pointless - all useful information would be lost by using an average (in the end, the differences have to be flattened somehow). So color differences within a set of windows makes much more sense. Now, why the overlaps? To keep even more useful information. To visualize it: if you color one square in a notebook black and leave its neighbor white and you pick window size to be equal to the size of such square, the average color difference within both squares would be zero. But if you slide a window by half the square size, you'll get [0, INFORMATIVE_VALUE, 0]. At least that's the intuition I used:
 
 ```python
+def calculate_sharpness_score(channel_slices: list[torch.Tensor]) -> float:
+    total_scores = []
 
+    for slice_tensor in channel_slices:
+        # Horizontal differences (each pixel vs right neighbor)
+        horizontal_diff = torch.abs(slice_tensor[:, :-1] - slice_tensor[:, 1:])
+        # Vertical differences (each pixel vs bottom neighbor)
+        vertical_diff = torch.abs(slice_tensor[:-1, :] - slice_tensor[1:, :])
+        # Diagonal differences (top-left to bottom-right)
+        diagonal1_diff = torch.abs(slice_tensor[:-1, :-1] - slice_tensor[1:, 1:])
+        # Diagonal differences (top-right to bottom-left)
+        diagonal2_diff = torch.abs(slice_tensor[:-1, 1:] - slice_tensor[1:, :-1])
+        # Sum all differences for this channel
+        channel_score = (horizontal_diff.sum() + vertical_diff.sum() + diagonal1_diff.sum() + diagonal2_diff.sum())
+
+        total_scores.append(channel_score)
+
+    average_score = torch.stack(total_scores).mean()
+
+    return average_score.item()
+
+
+def build_offline_cache(dataset: HybridDenoisingDataset, window_size: int) -> dict[str, list[float]]:
+    cache = {}
+    step_size = window_size // 2
+
+    for noisy_image, clean_image, vit_noisy, filename in dataset:
+        cache[filename] = []
+
+        for x in range(0, clean_image.shape[1], step_size):
+            for y in range(0, clean_image.shape[2], step_size):
+                channel_slices = []
+
+                for c in range(0, 3):
+                    channel_array = clean_image[c]
+                    slice = channel_array[x:x + window_size, y:y + window_size]
+
+                    channel_slices.append(slice)
+
+                sharpness_score = calculate_sharpness_score(channel_slices)
+
+                cache[filename].append((x, y, sharpness_score))
+
+    return cache
 ```
+
+The function doing the actual calculations check the neighbors horizontally, vertically and diagonally. It's invoked by `build_offline_cache` over all channels. Obviously using such an explicit code would mean that the process of building the offline cache would take ages (8 minutes on my PC), so vectorized versions are more preferable:
+
+```python
+def calculate_sharpness_score_vectorized(windows) -> torch.Tensor:
+    horizontal_diff = torch.abs(windows[:, :, :, :, :-1] - windows[:, :, :, :, 1:])
+    vertical_diff = torch.abs(windows[:, :, :, :-1, :] - windows[:, :, :, 1:, :])
+    diagonal1_diff = torch.abs(windows[:, :, :, :-1, :-1] - windows[:, :, :, 1:, 1:])
+    diagonal2_diff = torch.abs(windows[:, :, :, :-1, 1:] - windows[:, :, :, 1:, :-1])
+    # Sum across spatial dimensions and average across channels
+    total_diff = (horizontal_diff.sum(dim=(3,4)) + vertical_diff.sum(dim=(3,4)) +
+                  diagonal1_diff.sum(dim=(3,4)) + diagonal2_diff.sum(dim=(3,4)))
+
+    # Average across channels: (3, num_h_windows, num_w_windows) -> (num_h_windows, num_w_windows)
+    return total_diff.mean(dim=0)
+
+
+def build_offline_cache_optimized(dataset: HybridDenoisingDataset, window_size: int) -> dict[str, list[tuple[float, float, float]]]:
+    cache = {}
+    step_size = window_size // 2
+
+    for noisy_image, clean_image, vit_noisy, filename in dataset:
+        cache[filename] = []
+        windows = clean_image.unfold(1, window_size, step_size).unfold(2, window_size, step_size)
+        sharpness_scores = calculate_sharpness_score_vectorized(windows)
+        num_h_windows, num_w_windows = windows.shape[1], windows.shape[2]
+
+        for h_idx in range(num_h_windows):
+            for w_idx in range(num_w_windows):
+                x = h_idx * step_size
+                y = w_idx * step_size
+                score = sharpness_scores[h_idx, w_idx].item()
+
+                cache[filename].append((x, y, score))
+
+    return cache
+```
+
+Two for loops down, and the execution time went from 8 minutes to 43 seconds. Sweet. 
