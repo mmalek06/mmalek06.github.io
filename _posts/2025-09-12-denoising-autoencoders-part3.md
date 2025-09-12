@@ -8,7 +8,7 @@ categories:
 tags: ["python", "pytorch", "transfer learning", "computer vision", "transformer", "gradcam"]
 ---
 
-# Denoising autoencoders, Part 2 - improving the denoising quality with a custom loss function
+# Denoising autoencoders, Part 3 - improving the denoising quality with a custom loss function
 
 In the previous post, I said I probably wouldn't come back to this topic soon, but I couldn't stop thinking that this series wouldn't be complete until I investigated how my final architecture "thinks" and, depending on what I saw, whether there might still be some low-hanging fruit to harvest in this project. Also, when I zoomed in on the denoised images, it became clear than they are blurry - so of them REALLY blurry. Could something be done with that? ...And so I arrived at the idea of using the `pytorch-grad-cam` library to see what activates my network, which in turn guided my next steps.
 
