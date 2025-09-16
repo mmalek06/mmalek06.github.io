@@ -282,14 +282,11 @@ The second one looks much more crisp, doesn't it? Sadly, it introduces the so-ca
 
 At this point, I remembered something from my university days - in my professional career I've been a pretty standard web-oriented programmer, so I didn't really have many opportunities to use any of the advanced math and algorithms I learned. To be honest, I've forgotten most of it; maybe that's why I'm having so much fun rediscovering it while experimenting with AI :) 
 
-Anyway, that advanced math I'm refering to is the Fast Fourier Transform. If your memory serves you better than mine does, you may remember what is it used for, but for those who don't know - it's a way to see what frequencies a given signal consists of. A signal can be constructed from the value domain of any mathematical function, but for the illustrative purposes, let's use a sinusoid. Given two sin functions -> `sin(2x)` and `sin(4x)` we'll say the first one has frequency == 2, and the second one has frequency == 4. Their sum constitutes a new function that looks like this:
+Anyway, that advanced math I'm referring to is the Fast Fourier Transform. `RegionalSharpnessLoss` was subconsciously inspired by frequency-domain thinking, but it does not recover frequencies or run an FFT - it measures local high-frequency energy directly in the spatial domain by scoring sharp intensity changes within windows and comparing their distributions between images.
 
-<img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/sin_sum.png" />
-<br />
+For context, FFT analyzes a signal's global frequency content. Think of two sinusoids, `sin(2x)` and `sin(4x)`. Their sum contains components at frequencies 2 and 4; when you sample that sum and run an FFT, the spectrum shows peaks at those frequencies. How and why that works is beyond the scope of this blog post, and since I'm not a mathematician, I believe there are people way smarter than me that can explain it. [This guy](https://www.youtube.com/watch?v=spUNpyF58BY) and [this guy](https://www.youtube.com/watch?v=h7apO7q16V0) both give perfect explanations.
 
-So given a few points sampled from the value set of such a function (the one that's the sum of two sinusoids), FFT will tell us what frequency components are present. Those frequency components are 2 and 4, as in the original functions. How and why that works is beyond the scope of this blog post, and since I'm not a mathematician, I believe there are people way smarter than me that can explain it. [This guy](https://www.youtube.com/watch?v=spUNpyF58BY) and [this guy](https://www.youtube.com/watch?v=h7apO7q16V0) both give perfect explanations.
-
-I mentioned that a signal relates to a mathematical function, but since fft only requires sampled data to do its magic, not the function itself, we can pretend the images were created by some function and pass their pixel values as the data. Pytorch has 999 handy utilities and one of such utilities is the `torch.fft` namespace. Before I lay out the full implementation, I'll use a simple example:
+I mentioned that a signal relates to a mathematical function, but since fft only requires sampled data to do its magic, not the function itself, we can pretend the images were created by some function and pass their pixel values as data into one of 999 handy utilities that comes bundled inside pytorch framework - the `torch.fft` namespace. Before I lay out the full implementation, I'll use a simple example:
 
 ```python
 def get_image(thickness):
