@@ -275,7 +275,7 @@ Using it in place of MSE wouldn't do any good because it's not meant as a genera
 
 And this one shows the MSE + RegionalSharpnessLoss:
 
-<img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/denoising_mse_regsharp.png.png" />
+<img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/denoising_mse_regsharp.png" />
 <br />
 
 The second one looks much more crisp, doesn't it? Sadly, it introduces the so-called checkerboard artifact, probably because of the windowing method I used. It may not be visible unless you try very hard to see it, but it's there. It also causes some weird discoloration in some images. But, like I said - it helped with the annoying blur, hmmm...
