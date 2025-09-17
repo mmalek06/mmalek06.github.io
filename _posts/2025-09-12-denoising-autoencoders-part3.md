@@ -366,7 +366,7 @@ The checkerboard has vanished too, but the overal result seems less sharp. Maybe
 So there's one more optimization technique that could be employed here. Does it matter much for this dataset? No. Okay, does it at least make the results visibly better? Sometimes yes, but sometimes they're slightly worse. Why am I describing it anyway? Well, for one, I spent a good amount of time figuring it out. The other reason is that it may come in handy in some other problems. The optimization technique is: putting more emphasis on high frequencies. I hoped it would make edges sharper, and it did, but not to a degree that would push my baseline MSE even lower.
 
 ```python
-class FrequencySharpnessLossVectorized(nn.Module):
+class FrequencySharpnessLoss(nn.Module):
     def __init__(self, high_freq_weight: float = 2.0):
         super().__init__()
         self.high_freq_weight = float(high_freq_weight)
