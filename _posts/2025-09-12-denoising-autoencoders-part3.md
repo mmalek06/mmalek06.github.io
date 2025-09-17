@@ -126,7 +126,7 @@ They are not as bright, and not complementary anymore. Also, it seems that the U
 This is the moment when I finished my visual analysis and summed it up with:
 Okay, so ViT attends to the fragments that show cracks, and then the CNN module tones those features down. Is that good or bad? Well, the task was to denoise the images, not to denoise the cracks, and even though this is kind of weird, the overall process makes the result better (ViT + U-Net did a much better job than any other variation I tried). But what would happen if I pushed the network to focus on the features that activated ViT the most? That wouldn't work. Some cracks are very small, so focusing on them could potentially make images better in the regions they occupy, but perhaps worse in the remaining ones. Hmm... But what if I focused on the edges? The images in my dataset are basically textures - asphalt, concrete, sand-like stuff, etc. There are visible edges between cracks and the other parts, but also between different elements of the images. For example, there are some stone-like pieces on top of sand; also, the asphalt material isn't all black. Could focusing on that give some kind of visual quality boost?
 
-## The code - dealing with edges
+## The code - first attempts on sharpening the results
 
 That's how I arrived at the idea of a custom loss function that would penalize color differences between different colored regions. Cracks stand out from what they are on, stones look different from the material they are on, those small grains of whatever that asphalt surfaces have also differ from the rest of the texture.
 
@@ -282,35 +282,168 @@ The second one looks much more crisp, doesn't it? Sadly, it introduces the so-ca
 
 At this point, I remembered something from my university days - in my professional career I've been a pretty standard web-oriented programmer, so I didn't really have many opportunities to use any of the advanced math and algorithms I learned. To be honest, I've forgotten most of it; maybe that's why I'm having so much fun rediscovering it while experimenting with AI :) 
 
-Anyway, that advanced math I'm referring to is the Fast Fourier Transform. `RegionalSharpnessLoss` was subconsciously inspired by frequency-domain thinking, but it does not recover frequencies or run an FFT - it measures local high-frequency energy directly in the spatial domain by scoring sharp intensity changes within windows and comparing their distributions between images.
+Anyway, that advanced math/algo I'm referring to is the Fast Fourier Transform. `RegionalSharpnessLoss` scores sharp pixel intensity changes within windows and compares them between images. You could say it's a simplistic proxy for what an algorithm based on FFT would do and relating the two is how I arrived at the idea of using the later.
 
-For context, FFT analyzes a signal's global frequency content. Think of two sinusoids, `sin(2x)` and `sin(4x)`. Their sum contains components at frequencies 2 and 4; when you sample that sum and run an FFT, the spectrum shows peaks at those frequencies. How and why that works is beyond the scope of this blog post, and since I'm not a mathematician, I believe there are people way smarter than me that can explain it. [This guy](https://www.youtube.com/watch?v=spUNpyF58BY) and [this guy](https://www.youtube.com/watch?v=h7apO7q16V0) both give perfect explanations.
+FFT analyzes a signal's global frequency content. Think of two sinusoids, `sin(2x)` and `sin(4x)`. Their sum contains components at frequencies 2 and 4; when you sample that sum and run an FFT, the spectrum shows peaks at those frequencies. Peaks - meaning numbers greater than zero. How and why that works is beyond the scope of this blog post, and since I'm not a mathematician, I believe there are people way smarter than me that can explain it. [This guy](https://www.youtube.com/watch?v=spUNpyF58BY) and [this guy](https://www.youtube.com/watch?v=h7apO7q16V0) both give perfect explanations. I said it works globally, but nothing in FFT says it wouldn't work with rolling windows - as in `RegionalSharpnessLoss`. No matter how it's used, it will do the same - it will find the frequencies involved. Also, it's good to ask what's the intuition behind a frequency in the context of image processing? Mine was (as confirmed by various language models :) ) that it's valid to say that sharp difference in pixel values create high frequencies.
 
-I mentioned that a signal relates to a mathematical function, but since fft only requires sampled data to do its magic, not the function itself, we can pretend the images were created by some function and pass their pixel values as data into one of 999 handy utilities that comes bundled inside pytorch framework - the `torch.fft` namespace. Before I lay out the full implementation, I'll use a simple example:
+I mentioned that a signal relates to a mathematical function, but since FFT only requires sampled data to do its magic, not the function itself, we can pretend the images were created by some function and pass their pixel values as data into one of 999 handy utilities that comes bundled inside pytorch framework - the `torch.fft` namespace. Before I lay out the full implementation, I'll use a simple example of how it will work:
 
 ```python
-def get_image(thickness):
-    H, W = 256, 256
-    radius = 60.0
-    bg = 0.5
-    fg = 1.0
+import torch
+import torchvision.transforms as T
+
+
+def get_image(thickness: float, blur: str | None = None) -> torch.Tensor:
+    H = W = 256
+    radius, bg, fg = 60.0, 0.0, 1.0
     y = torch.arange(H, dtype=torch.float32) - H // 2
     x = torch.arange(W, dtype=torch.float32) - W // 2
     Y, X = torch.meshgrid(y, x, indexing='ij')
-    dist = torch.sqrt(X**2 + Y**2)
-    ring_mask = (dist >= radius - thickness / 2) & (dist <= radius + thickness / 2)
+    dist = torch.hypot(X, Y)
     img = torch.full((H, W), bg, dtype=torch.float32)
-    img[ring_mask] = fg
+    ring = (dist >= radius - thickness / 2) & (dist <= radius + thickness / 2)
+    img[ring] = fg
 
-    return img
+    if blur is None:
+        return img
+
+    k, sigma = (5, 1.0) if blur == "less" else (15, 3.0)
+    blur_op = T.GaussianBlur(kernel_size=k, sigma=sigma)
+
+    return blur_op(img.unsqueeze(0)).squeeze(0)
+
+
+def draw_image(img: torch.Tensor, thickness: float) -> None:
+    plt.figure(figsize=(6, 6))
+    plt.imshow(img.cpu().numpy(), cmap="gray", vmin=0, vmax=1)
+    plt.title(f"Gray background with {thickness}px white ring")
+    plt.axis('off')
+    plt.show()
 ```
 
-That function will create a B/W image with a circle in the center. Then, the pixel data will be processed by torch:
+That function will create a B/W image with a circle in the center. It can either be blurried or not blurried. Let's generate two images, run fft2 on them and see what were the differences in frequency magnitudes:
 
 ```python
-magnitudes = torch.fft.fft2(get_image(thickness=8))
-magnitudes_shifted = torch.fft.fftshift(magnitudes)
-magnitudes_abs = torch.abs(magnitudes_shifted)
+img_normal = get_image(8)
+magnitudes_normal = torch.fft.fft2(img)
+absolute_magnitudes_normal = torch.abs(magnitudes_normal)
+img_blur = get_image(8, "more")
+magnitudes_blur = torch.fft.fft2(img_blur)
+absolute_magnitudes_blur = torch.abs(magnitudes_blur)
+
+(absolute_magnitudes_normal - absolute_magnitudes_blur).abs().mean()
 ```
 
-That's the standard way of doing it, however the `ffshift` call requires an explanation.
+`14.8913` - that's the number that quantifies the differences between the two images. So in a form of a full loss function it will look like this:
+
+```python
+class FrequencySharpnessLoss(nn.Module):
+    def forward(self, outputs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        out_fft = torch.fft.fft2(outputs)
+        tgt_fft = torch.fft.fft2(targets)
+        out_mag = out_fft.abs()
+        tgt_mag = tgt_fft.abs()
+        loss = (out_mag - tgt_mag).abs().mean()
+        loss = loss / 1000.0
+
+        return loss
+```
+
+That division by 1000 may look arbitrary, but I did that to put the loss value on the same scale as MSE loss. I again used `0.8, 0.2` weights and the result is again better from the one obtained by the MSE-trained network. See for yourself:
+
+<img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/denoising_mse.png" />
+<br />
+
+And this one shows the FFT + MSE -trained network result:
+
+<img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/denoising_mse_fft.png" />
+<br />
+
+The checkerboard has vanished too, but the overal result seems less sharp. Maybe something can be done about it. But before I move on to the final implementation, a word of explanation. The ViT + U-Net model I'm using as a baseline here has been trained with MSE loss function. Then, during the testing phase I also used MSE. But in this post I'm using MSE + another loss function. It's hard to compare the results in this setup, so I decided to make it simple: I'll consider a result better, if the related MSE is no greater than that of the baseline model, and visually it looks better. Would that slide in a scientific paper? No. But this is not a scientific paper, so... :)
+
+## The code - sharpening the "advanced" way
+
+So there's one more optimization technique that could be employed here. Does it matter much for this dataset? No. Okay, does it at least make the results visibly better? Sometimes yes, but sometimes they're slightly worse. Why am I describing it anyway? Well, for one, I spent a good amount of time figuring it out. The other reason is that it may come in handy in some other problems. The optimization technique is: putting more emphasis on high frequencies. I hoped it would make edges sharper, and it did, but not to a degree that would push my baseline MSE even lower.
+
+```python
+class FrequencySharpnessLossVectorized(nn.Module):
+    def __init__(self, high_freq_weight: float = 2.0):
+        super().__init__()
+        self.high_freq_weight = float(high_freq_weight)
+
+        self.register_buffer("_freq_mask", None, persistent=False)
+
+    def forward(self, outputs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        _, __, H, W = outputs.shape
+        mask = self._ensure_mask(H, W, outputs.device, outputs.dtype)
+        out_fft = torch.fft.fftshift(torch.fft.fft2(outputs), dim=(-2, -1))
+        tgt_fft = torch.fft.fftshift(torch.fft.fft2(targets), dim=(-2, -1))
+        out_mag = out_fft.abs()
+        tgt_mag = tgt_fft.abs()
+        diff = (out_mag - tgt_mag).abs() * mask
+        loss = diff.mean()
+        loss = loss / 1000.0
+
+        return loss
+
+    @torch.no_grad()
+    def _ensure_mask(self, H: int, W: int, device, dtype) -> torch.Tensor:
+        if self._freq_mask is None or self._freq_mask.device != device or self._freq_mask.dtype != dtype:
+            y = torch.arange(H, device=device, dtype=dtype) - H // 2
+            x = torch.arange(W, device=device, dtype=dtype) - W // 2
+            Y, X = torch.meshgrid(y, x, indexing='ij')
+            dist = torch.hypot(X, Y)
+            max_dist = torch.sqrt(torch.tensor((H // 2) ** 2 + (W // 2) ** 2, device=device, dtype=dtype))
+            dist_norm = dist / max_dist
+            mask = 1.0 + self.high_freq_weight * dist_norm
+            self._freq_mask = mask
+
+        return self._freq_mask
+```
+
+`fft2` call would return a tensor where the low frequencies are at the edges and high frequencies at the center. `fftshift` inverts that. Would this algorithm run just fine without this operation? It would! However, note the `_ensure_mask` method - that's the actual reason for incorporating the `fftshift` invocation. `_ensure_mask` uses the concept of distance, which is intuitively easy to understand, and because of that, this was the easiest way for me to think about the problem at hand, that's why I defined it like I did. I hope I'll manage to clear it out in the next lines. 
+
+`_ensure_mask` builds two 1d tensors first (example with H=W=10) and a meshgrid:
+
+```text
+tensor([[-5., -4., -3., -2., -1.,  0.,  1.,  2.,  3.,  4.],
+        [-5., -4., -3., -2., -1.,  0.,  1.,  2.,  3.,  4.],
+        [-5., -4., -3., -2., -1.,  0.,  1.,  2.,  3.,  4.],
+        [-5., -4., -3., -2., -1.,  0.,  1.,  2.,  3.,  4.],
+        [-5., -4., -3., -2., -1.,  0.,  1.,  2.,  3.,  4.],
+        [-5., -4., -3., -2., -1.,  0.,  1.,  2.,  3.,  4.],
+        [-5., -4., -3., -2., -1.,  0.,  1.,  2.,  3.,  4.],
+        [-5., -4., -3., -2., -1.,  0.,  1.,  2.,  3.,  4.],
+        [-5., -4., -3., -2., -1.,  0.,  1.,  2.,  3.,  4.],
+        [-5., -4., -3., -2., -1.,  0.,  1.,  2.,  3.,  4.]])
+```
+
+<b>Side note</b>: the X meshgrid is a transposed version of Y.
+
+Then it creates a distance tensor - distance from the center that represents the differences between the frequencies. After normalizing to [0, 1] range, it creates the mask. Values near the center (low frequencies) get weights close to 1.0, while values at the edges (high frequencies) get weights up to ~3.0 (with default `high_freq_weight=2.0`). This mask emphasizes high-frequency differences in the loss computation. For the toy example of 10x10 image it looks like this:
+
+```text
+0	3.00000	2.81108	2.64924	2.52315	2.44222	2.41421	2.44222	2.52315	2.64924	2.81108
+1	2.81108	2.60000	2.41421	2.26491	2.16619	2.13137	2.16619	2.26491	2.41421	2.60000
+2	2.64924	2.41421	2.20000	2.01980	1.89443	1.84853	1.89443	2.01980	2.20000	2.41421
+3	2.52315	2.26491	2.01980	1.80000	1.63246	1.56569	1.63246	1.80000	2.01980	2.26491
+4	2.44222	2.16619	1.89443	1.63246	1.40000	1.28284	1.40000	1.63246	1.89443	2.16619
+5	2.41421	2.13137	1.84853	1.56569	1.28284	1.00000	1.28284	1.56569	1.84853	2.13137
+6	2.44222	2.16619	1.89443	1.63246	1.40000	1.28284	1.40000	1.63246	1.89443	2.16619
+7	2.52315	2.26491	2.01980	1.80000	1.63246	1.56569	1.63246	1.80000	2.01980	2.26491
+8	2.64924	2.41421	2.20000	2.01980	1.89443	1.84853	1.89443	2.01980	2.20000	2.41421
+9	2.81108	2.60000	2.41421	2.26491	2.16619	2.13137	2.16619	2.26491	2.41421	2.60000
+```
+
+And the results? Again, see for yourself (the last one shows the result produced by network trained with the "advanced" loss function):
+
+<img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/denoising_mse.png" />
+<br />
+<img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/denoising_mse_fft.png" />
+<br />
+<img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/denoising_mse_fft_adv.png" />
+<br />
+
+## Summary
+
+After I finished this post, I had a realization that maybe this could be improved. A long, long time ago, I heard about the so-called wavelet analysis that promises to be a more advanced form of Fourier analysis. Notice that the solution I used only informed us about the existence of certain frequencies, not their placement. So what if I incorporate that into the training? But that's for the future - I need to learn some more math first...
