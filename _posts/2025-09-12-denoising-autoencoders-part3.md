@@ -444,6 +444,8 @@ And the results? Again, see for yourself (the last one shows the result produced
 <img style="display: block; margin: 0 auto; margin-top: 15px;" src="https://mmalek06.github.io/images/denoising_mse_fft_adv.png" />
 <br />
 
+I guess those last two images could be used in a contest entitled "find 5 differences". If you look hard enough, you'll see them. 
+
 ## Summary
 
 After I finished this post, I had a realization that maybe this could be improved. A long, long time ago, I heard about the so-called wavelet analysis that promises to be a more advanced form of Fourier analysis. Notice that the solution I used only informed us about the existence of certain frequencies, not their placement. So what if I incorporate that into the training? But that's for the future - I need to learn some more math first...
