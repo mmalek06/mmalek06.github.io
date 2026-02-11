@@ -23,9 +23,9 @@ In my case, I was building a classic machine learning pipeline with a dozen scri
 
 Turns out that's not the best-performing strategy one can come up with. In my case, I was also constrained by the hardware - it was an experiment I was running on my PC, so offloading it to Databricks was not possible.
 
-<b>Side note #1:</b> I didn't gather the times it took to write and read using `pickle`, so I'll only pit the alternatives against themselves.
-<b>Side note #2:</b> in the next few examples you'll see something silly - loading the data from db, then immediately writing it to the disk or shared memory - that's only to illustrate my point. In the original code I wrote it wasn't so straightforward. There were some initial data transformations that justified loading the data in the main script, then saving it for the other ones to process.
-<b>Side note #3:</b> each time measurement I present in this post was executed several times to ensure I'm not believing the outliers; I just didn't put that looping code.
+<b>Side note #1:</b> I didn't gather the times it took to write and read using `pickle`, so I'll only pit the alternatives against themselves.<br />
+<b>Side note #2:</b> in the next few examples you'll see something silly - loading the data from db, then immediately writing it to the disk or shared memory - that's only to illustrate my point. In the original code I wrote it wasn't so straightforward. There were some initial data transformations that justified loading the data in the main script, then saving it for the other ones to process.<br />
+<b>Side note #3:</b> each time measurement I present in this post was executed several times to ensure I'm not believing the outliers; I just didn't put that looping code.<br />
 <b>Side note #4:</b> every code snippet here expects imports like this to be present:
 
 ```python
