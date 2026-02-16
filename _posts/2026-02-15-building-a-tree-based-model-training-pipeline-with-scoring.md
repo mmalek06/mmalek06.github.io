@@ -39,11 +39,11 @@ Then I did my research and saw that a lot of people in the quant/algotrading spa
 
 ## What are the differences?
 
-As it goes for ML, when you see similar libraries, the differences between them are usually very technical and nuanced, and it's no different this time, so I won't really go into the details. The thing is, those details usually don't matter much. With dataset A, you'll get great results with XGBoost. With a similar but slightly different dataset B, you'll get waaay better results using either of the other two, and so on. So how do I find the best model? I run Optuna over a rich search space until it finds something that meets the requirements. Everybody does it :)
+As it goes for ML, when you see similar libraries, the differences between them are usually very technical and nuanced, and it's no different this time, so I won't really go into the details. The thing is, those details usually don't matter much when you apply the techniques. With dataset A, you'll get great results with XGBoost. With a similar but slightly different dataset B, you'll get better results using either of the other two, and so on. So how do I find the best model for my dataset? I run Optuna over a rich search space until it finds something that meets the requirements. Everybody does it :)
 
-But let's lay out at least some minimal technical details. It is said that XGBoost heavily regularizes its trees to avoid overfitting, and it builds them level-wise (horizontally), which means it builds all the nodes on a given level before moving on. In other words, it tries to find all the splits on one level, thus avoiding missing something important. LightGBM, on the other hand, builds its trees leaf-wise. It's said this often leads to faster training and better overall results. I guess it may be the truth - you don't have to explore the whole search space to find the best parameters, you sometimes just get lucky. But anyway, in my case, it didn't train faster, nor did it lead to great results. In my case the standalone LightGBM loses 99% of the time when pitted against XGBoost or CatBoost; however, it still manages to bring some value to the table. As for CatBoost - I just needed a third model that would serve as a tie breaker. Turns out, I kept loosing some predictions in ensemble methods, because XGB and LGBM were not agreeing quite often and it got better after mixing in the third model.
+But let's lay out at least some minimal technical details. It is said that XGBoost heavily regularizes its trees to avoid overfitting, and it builds them level-wise, which means it builds all the nodes on a given level before moving on. In other words, it tries to find all the splits on one level, thus avoiding missing something important. XGB trees are more balanced, possibly less deep. LightGBM, on the other hand, builds its trees leaf-wise which means that on each iteration it picks a leaf with the greatest gain and it only splits on that one. Thus, LGBM trees may be unbalanced and very deep. It's also said this often leads to faster training and better overall results. But in my case, it didn't train faster, nor did it lead to great results. In my case the standalone LightGBM loses most of the time when pitted against XGBoost or CatBoost; however, it still manages to bring some value to the table. As for CatBoost - I just needed a third model that would serve as a tie breaker. Turns out, I kept losing some predictions in ensemble methods, because XGB and LGBM were not agreeing quite often and it got better after mixing in the third model.
 
-<b>Side note:</b> ok, first and foremost I'm a programmer, so I couldn't leave out one technical detail I only hinted at above: the regularization. So the thing is that XGB implements L1 and L2 regularization in its classic form and it's used on the level of a tree. You can use these params for regularization:
+<b>Side note:</b> ok, first and foremost I'm a curious programmer, so I couldn't leave out one technical detail I only hinted at above: the regularization and tree balancing. So the thing is that XGB implements L1 and L2 regularization in its classic form and it's used on the level of a tree. You can use these params for regularization:
 
 - `lambda (L2)`
 - `alpha (L1)`
@@ -51,7 +51,9 @@ But let's lay out at least some minimal technical details. It is said that XGBoo
 - `min_child_weight`
 - `max_depth`
 
- LGBM mostly uses the same regularization math, however it calls some params differently, and also adds some of its own:
+L1 regularization is turned off by default and L2 is turned on. What it all leads to is: XGB trees are often more balanced than LGBM trees. XGB may decide not to split on leaf A, while it still splits on leaf B, but in general it will happen less often than in the case of LGBM. This behavior is an artifact of the architectures both use.
+
+LGBM mostly uses the same regularization math, however it calls some params differently, and also adds some of its own:
  
 - `lambda_l1`
 - `lambda_l2`
@@ -60,21 +62,29 @@ But let's lay out at least some minimal technical details. It is said that XGBoo
 - `max_depth`
 - `num_leaves`
 
-Also, since it builds its trees leaf-wise, regularization is mostly architectural, not mathematical - you can set the `num_leaves` and `min_samples` params exactly for that. 
+L1 and L2 are turned off by default. The `min_gain_to_split` plays a role that is similar to XGBoost's `gamma` - if the value is too low, there's no split, however, it's also turned off by default. Also, since it builds its trees leaf-wise, regularization relies more on architectural constraints by default - you can set the `num_leaves` and `min_data_in_leaf` params exactly for that, but even if you switch on all the regularization knobs, you'll be getting less balanced trees most of the time.
 
-Now, CatBoost is slightly different. It does have classic L2 regularization, exposed as `l2_leaf_reg` which penalizes large leaf values directly, very much in the same spirit as L2 in XGBoost. But that's only part of the story.
+But how do these two algorithms even decide whether or not to split (XGB) or where to split (LGBM). They both use the gain metric for that. That's also another big and important difference between the two. I can summarize it like this: XGB uses the gain metric to limit the splits while LGBM uses the same metric to find the leaf to split on.
 
-First, CatBoost uses ordered boosting, which significantly reduces target leakage when computing category-based statistics. Instead of using the full dataset to compute target averages for categorical features (which would leak future information), it computes them in an ordered manner - each observation only sees statistics calculated from earlier observations. This alone acts as a strong implicit regularizer, because it prevents overly optimistic splits early in training.
+As for CatBoost and its tree building approach: it uses a strategy called "symmetric trees" (or "oblivious trees") by default. This means that at each level of the tree, the same split condition is used for all nodes. Sounds limiting, but it leads to very fast inference and acts as a natural form of regularization:
 
-Second, CatBoost treats categorical features natively. Instead of forcing you to one-hot encode or manually target-encode them, it builds internal target statistics (CTR features) with built-in smoothing. That smoothing behaves like Bayesian regularization - rare categories are automatically shrunk toward the global mean, which prevents extreme values for categories that appear only a few times.
+```plaintext
+        [age > 30?]
+        /         \
+   [yes]          [no]
+   /    \         /    \
+[inc>50k?]      [inc>50k?] <- same split across the entire level
+```
 
-Finally, CatBoost uses symmetric (oblivious) trees. Each tree has a fixed depth, and the same split condition is applied across an entire level. This makes the tree structure highly regular and constrained - you don't get the kind of highly irregular, deep branches you might see in leaf-wise growth. In practice, that architectural constraint behaves like structural regularization.
+As for regularization, CatBoost offers a similar set of parameters:
 
-So while XGB and LGBM expose regularization mostly through explicit penalties and structural limits, CatBoost combines:
+- `l2_leaf_reg` (equivalent to lambda/lambda_l2)
+- `min_data_in_leaf`
+- `max_depth` (defaults to 6, same as XGBoost)
+- `num_trees`
 
-- `l2_leaf_reg` (explicit L2),
-- ordered boosting (leakage prevention),
-- smoothed categorical statistics,
-- symmetric tree structure,
+There's no direct equivalent of `gamma`/`min_gain_to_split`. Instead, CatBoost relies more on symmetric trees and a technique called "ordered boosting", which prevents prediction shift (a type of overfitting specific to gradient boosting).
 
-which together form a kind of hybrid mathematical + architectural regularization system.
+One more thing worth noting: CatBoost defaults to `grow_policy='SymmetricTree'`, but you can switch to `Depthwise` (like XGBoost) or `Lossguide` (like LightGBM). So technically you can get the behavior of all three libraries in one, it's just the default setting that differs.
+
+Ok, that was a huge side note, so let's look at the code.
