@@ -17,7 +17,7 @@ In [my previous post](https://mmalek06.github.io/python/apache-arrow/data-engine
 
 #2 Obviously, the degree of your success will also be heavily dependent on the quality and amount of data that you use - writing web scrapers, if you don't want to pay for a commercially available API, is another huge subdomain in algotrading.
 
-#3 Maybe less obviously, but still — finding the correct target for your models can also be a huge effort, and defining it as simply as "I will short like crazy, so give me 10,000 tickers that are about to implode tomorrow, so I can sell a truckload of outrageously overpriced calls and pretend margin requirements are just a social construct" won't work and will make you lose your house, your wife, dog, and kids. Don't try this at home!
+#3 Maybe less obviously, but still - finding the correct target for your models can also be a huge effort, and defining it as simply as "I will short like crazy, so give me 10,000 tickers that are about to implode tomorrow, so I can sell a truckload of outrageously overpriced calls and pretend margin requirements are just a social construct" won't work and will make you lose your house, your wife, dog, and kids. Don't try this at home!
 
 #4 obviously I won't share the details about what features I use, or other technicalities, because if you do the same, my strategy may stop working! :)
 
@@ -64,7 +64,29 @@ LGBM mostly uses the same regularization math, however it calls some params diff
 
 L1 and L2 are turned off by default. The `min_gain_to_split` plays a role that is similar to XGBoost's `gamma` - if the value is too low, there's no split, however, it's also turned off by default. Also, since it builds its trees leaf-wise, regularization relies more on architectural constraints by default - you can set the `num_leaves` and `min_data_in_leaf` params exactly for that, but even if you switch on all the regularization knobs, you'll be getting less balanced trees most of the time.
 
-But how do these two algorithms even decide whether or not to split (XGB) or where to split (LGBM). They both use the gain metric for that. That's also another big and important difference between the two. I can summarize it like this: XGB uses the gain metric to limit the splits while LGBM uses the same metric to find the leaf to split on.
+But how do these two algorithms even decide whether or not to split (XGB) or where to split (LGBM). They both use the gain metric for that. That's also another big and important difference between the two. I can summarize it like this: XGB uses the gain metric to limit the splits while LGBM uses the same metric to find the best leaf (the one with the highest gain) to split on.
+
+Anyway, the end effect is that an LGBM tree may look like this:
+
+```plaintext
+        [root]
+       /      \
+     [A]      [B]
+    /   \       
+  [C]   [D]
+         |
+        [E]
+```
+
+...and XGB tree can look more like this:
+
+```plaintext
+        [root]
+       /      \
+     [A]      [B]
+    /   \    /   \
+  [C]  [D] [E]  [F]
+```
 
 As for CatBoost and its tree building approach: it uses a strategy called "symmetric trees" (or "oblivious trees") by default. This means that at each level of the tree, the same split condition is used for all nodes. Sounds limiting, but it leads to very fast inference and acts as a natural form of regularization:
 
@@ -72,9 +94,11 @@ As for CatBoost and its tree building approach: it uses a strategy called "symme
         [age > 30?]
         /         \
    [yes]          [no]
-   /    \         /    \
-[inc>50k?]      [inc>50k?] <- same split across the entire level
+   /    \         /   \
+ [inc>50k?]     [inc>50k?] <- same split across the entire level
 ```
+
+Looking at the graph, it looks kind of similar to the one for XGB; however, the difference is in the split condition.
 
 As for regularization, CatBoost offers a similar set of parameters:
 
@@ -87,4 +111,139 @@ There's no direct equivalent of `gamma`/`min_gain_to_split`. Instead, CatBoost r
 
 One more thing worth noting: CatBoost defaults to `grow_policy='SymmetricTree'`, but you can switch to `Depthwise` (like XGBoost) or `Lossguide` (like LightGBM). So technically you can get the behavior of all three libraries in one, it's just the default setting that differs.
 
-Ok, that was a huge side note, so let's look at the code.
+Ok, that was a huge side note, so now let's look at the code, kind of...
+
+## Time series split
+
+There's so much stuff in this project of mine that I didn't know where to start, so I just picked the first topic at random. It's something specific to making predictions based on time series: splitting the data so that there's no look-ahead bias/error (sometimes known as temporal leakage).
+
+This one is pretty easy to understand. Time series are time-ordered; therefore, the process of splitting the data into train–val–test datasets needs to be time-aware. In my case, I'm taking the last N months of data for training, then 1/3 * N of that for validation, and the same amount for the test set. To illustrate: I could use all 12 months from 2024 as my training dataset, then use the first 4 months of 2025 as the validation dataset and the next 4 (so beginning in May 2025) as the test dataset.
+
+However, there's a subtlety hidden in the numbers - one that I didn't realize until I passed my code through an LLM :)
+
+Let's say I'm training my models on the last 7 days of log returns and predicting the returns on the 8th day. Then some of the information from the last days of my training set will leak into the first days of my validation set. Specifically, the first week of the validation set overlaps with the last week of the training set. Luckily, there's a well-known strategy for dealing with this issue: using a purge gap. It's quicker to visualize than to describe:
+
+```plaintext
+|------ TRAIN ------|-- 7 days --|------ VAL ------|-- 7 days --|------ TEST ------| 
+```
+
+However, this leads to another subtle issue. What if your features are not as simple as log returns? What if you use features that need 90 days of prior data? Then the purge gap would have to be equal to 90. If you have a limited dataset, that would mean losing a lot of data, so it may be better to split it by ticker - tickers that go into the training dataset don't go into validation or test at all. It's called a cross-sectional split; however, you need to be aware that it still contains some temporal elements - market microstructure effects and cross-correlation between tickers.
+
+But that doesn't really solve the issue with small datasets - you may simply not be able to afford this. So there's another - some may say questionable - strategy: accept the overlap and the fact that the evaluation metrics may be overly optimistic. You may use a slightly smaller purge gap, accept the risk, and understand that when doing empirical tests (like paper trading), your model may slowly start to "degenerate" over time because the data it sees now (for the long features) starts to diverge from what was embedded in the training set.
+
+## Preparing the data for cross validation
+
+Did I mention, we're working on time-series data? :)
+
+Cross-validation is a very popular technique for model evaluation (called K-Fold CV). However, it would wreak havoc in this project, because it would break the temporal ordering and suddenly my models would be able to access data from the future. For that some smart people invented what's called Walk-Forward CV:
+
+```plaintext
+Fold 1: |---- TRAIN ----|purge|-- VAL --|
+Fold 2: |------- TRAIN -------|purge|-- VAL --|
+Fold 3: |---------- TRAIN ----------|purge|-- VAL --|
+```
+
+Each subsequent fold is larger to make sure the model performs well on all possible windows, not only one. Also, as you can see, there's no mixing of the temporally unavailable data that would occur had I used K-Fold:
+
+```plaintext
+Data:    [----1----|----2----|----3----|----4----|----5----]                                                        
+                
+Fold 1:  [   VAL   |  TRAIN  |  TRAIN  |  TRAIN  |  TRAIN  ]                                                        
+Fold 2:  [  TRAIN  |   VAL   |  TRAIN  |  TRAIN  |  TRAIN  ]                                                        
+Fold 3:  [  TRAIN  |  TRAIN  |   VAL   |  TRAIN  |  TRAIN  ]
+```
+
+Finally the code:
+
+```python
+class WalkForwardFold(NamedTuple):
+    fold_idx: int
+    df_train: pd.DataFrame
+    df_val: pd.DataFrame
+    train_start: pd.Timestamp
+    train_end: pd.Timestamp
+    val_start: pd.Timestamp
+    val_end: pd.Timestamp
+
+
+def create_walk_forward_splits(
+    df: pd.DataFrame,
+    n_folds: int = DEFAULT_WF_FOLDS,
+    val_months: int = DEFAULT_WF_VAL_MONTHS,
+    purge_days: int = PURGE_GAP_DAYS,
+    date_column: str = "target_date",
+) -> list[WalkForwardFold]:
+    """
+    Create walk-forward validation splits from a DataFrame.
+
+    Walk-forward validation trains on expanding windows and validates on
+    subsequent periods, mimicking real-world model deployment:
+
+    Fold 1: |---- TRAIN ----|purge|-- VAL --|
+    Fold 2: |------- TRAIN -------|purge|-- VAL --|
+    Fold 3: |---------- TRAIN ----------|purge|-- VAL --|
+    ...
+
+    Args:
+        df: DataFrame with date column, sorted by date
+        n_folds: Number of walk-forward folds
+        val_months: Length of each validation period in months
+        purge_days: Gap between train and val to prevent leakage
+        date_column: Name of the date column
+
+    Returns:
+        List of WalkForwardFold tuples with train/val DataFrames and date ranges
+    """
+    df = df.copy()
+    df["_wf_date"] = pd.to_datetime(df[date_column])
+    df = df.sort_values("_wf_date").reset_index(drop=True)
+    min_date = df["_wf_date"].min()
+    max_date = df["_wf_date"].max()
+    total_days = (max_date - min_date).days
+    val_days = val_months * 30
+    purge_td = pd.Timedelta(days=purge_days)
+    val_td = pd.Timedelta(days=val_days)
+    # Calculate how much space we need for all validation periods
+    # Last fold's val ends at max_date
+    # We work backwards to find where first fold's train starts
+    total_val_space = n_folds * val_days + n_folds * purge_days
+    min_train_days = 180  # At least 6 months of training data for first fold
+
+    if total_val_space + min_train_days > total_days:
+        raise ValueError(
+            f"Not enough data for {n_folds} folds with {val_months} month validation periods. "
+            f"Total days: {total_days}, required: {total_val_space + min_train_days}"
+        )
+
+    folds = []
+    # Calculate fold boundaries working backwards from max_date
+    # Each fold's validation period is val_months long
+    # Folds are spread evenly across the available validation space
+    available_for_val = total_days - min_train_days
+    step_days = (available_for_val - val_days) // (n_folds - 1) if n_folds > 1 else 0
+
+    for i in range(n_folds):
+        val_end = max_date - pd.Timedelta(days=(n_folds - 1 - i) * step_days)
+        val_start = val_end - val_td + pd.Timedelta(days=1)
+        train_end = val_start - purge_td - pd.Timedelta(days=1)
+        train_start = min_date
+        train_mask = df["_wf_date"] <= train_end
+        val_mask = (df["_wf_date"] >= val_start) & (df["_wf_date"] <= val_end)
+        df_train = df[train_mask].drop(columns=["_wf_date"]).reset_index(drop=True)
+        df_val = df[val_mask].drop(columns=["_wf_date"]).reset_index(drop=True)
+
+        if len(df_train) < 100 or len(df_val) < 50:
+            continue
+
+        folds.append(WalkForwardFold(
+            fold_idx=i,
+            df_train=df_train,
+            df_val=df_val,
+            train_start=pd.Timestamp(train_start),
+            train_end=pd.Timestamp(train_end),
+            val_start=pd.Timestamp(val_start),
+            val_end=pd.Timestamp(val_end),
+        ))
+
+    return folds
+```
