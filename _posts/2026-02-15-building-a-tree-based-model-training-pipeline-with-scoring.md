@@ -203,9 +203,6 @@ def create_walk_forward_splits(
     val_days = val_months * 30
     purge_td = pd.Timedelta(days=purge_days)
     val_td = pd.Timedelta(days=val_days)
-    # Calculate how much space we need for all validation periods
-    # Last fold's val ends at max_date
-    # We work backwards to find where first fold's train starts
     total_val_space = n_folds * val_days + n_folds * purge_days
     min_train_days = 180  # At least 6 months of training data for first fold
 
@@ -247,3 +244,14 @@ def create_walk_forward_splits(
 
     return folds
 ```
+
+It first makes sure the dataframe is sorted properly and selects the first and last date that it contains along with some other variables used lated in the loop. It also calculates `step_days` - the loop will use its value to move the window. And the loop itself goes from the max date backwards, building folds in the process. That if statement it contains is an example of defensive programming. Even though the date ranges are calculated in a way that prevents creating folds that are too small in terms of those ranges, a fold can still contain not enough data just because the data itself may be less dense in that range.
+
+## The training, finally!
+
+Before I jump on the code, I'll show you how the experiment is saved in mlflow - that will give you a better outlook of why I'm doing certain things the way I'm doing them:
+
+<p>
+    <img src="https://mmalek06.github.io/images/mlflow_with_models_collapsed.png">
+    <img src="https://mmalek06.github.io/images/mlflow_with_models_expanded.png">
+</p>
