@@ -247,7 +247,7 @@ def create_walk_forward_splits(
 
 It first makes sure the dataframe is sorted properly and selects the first and last date that it contains along with some other variables used lated in the loop. It also calculates `step_days` - the loop will use its value to move the window. And the loop itself goes from the max date backwards, building folds in the process. That if statement it contains is an example of defensive programming. Even though the date ranges are calculated in a way that prevents creating folds that are too small in terms of those ranges, a fold can still contain not enough data just because the data itself may be less dense in that range.
 
-## The training, finally!
+## Core training code, finally!
 
 Before I jump on the code, I'll show you how the experiment is saved in mlflow - that will give you a better outlook of why I'm doing certain things the way I'm doing them:
 
@@ -446,3 +446,630 @@ async def _train_on_prepared_data(
         stacking_meta_s2_s1_dependent_info=stacking_result.meta_s2_dep_info,
     )
 ```
+
+To my surprise CatBoost-GPU training was eating up almost all of my 16GB GPU-RAM and it was causing out of memory exceptions with XGBoost being trained in parallel (or the presence of XGB OOM-ed CatBoost, it doesn't matter). It didn't happen always, but often enough for me to address it on the architectural level expressed in this function. It first trains XGB, and then starts parallel training of CatBoost and LightGBM. It's fine to use `.to_thread` + `await`, because 99% of the processing time for all three models will be spent in the C++ code, outside normal python, so it won't block Python's main thread. And why am I even using async code? Well, because I implemented my training pipeline inside FastAPI's background jobs system.
+
+I won't show you all three train_*_models, because they basically look the same. Let's focus on the one that trains XGB:
+
+```python
+class XGBTrainingResult(NamedTuple):
+    s1_model: xgb.XGBClassifier
+    s2_model_s1_independent: xgb.XGBClassifier
+    s2_model_s1_dependent: xgb.XGBClassifier
+    s1_features: list[str]
+    s2_features_s1_independent: list[str]
+    s2_features_s1_dependent: list[str]
+    s1_params: dict
+    s2_params_s1_independent: dict
+    s2_params_s1_dependent: dict
+
+
+def train_xgb_models(
+    df_train: pd.DataFrame,
+    df_val: pd.DataFrame,
+    exchange: str,
+    n_trials_s1: int = N_TRIALS_S1,
+    n_trials_s2: int = N_TRIALS_S2,
+    parent_run_id: str | None = None,
+) -> XGBTrainingResult:
+    with mlflow.start_run(run_name="xgb_training", nested=parent_run_id is None):
+        if parent_run_id:
+            mlflow.set_tag("mlflow.parentRunId", parent_run_id)
+
+        with mlflow.start_run(run_name="xgb_stage1", nested=True):
+            s1_model, s1_features, s1_params = train_xgb_stage1(df_train, df_val, n_trials_s1)
+            X_val_s1 = df_val[s1_features].astype("float64")
+            signature = infer_signature(X_val_s1, s1_model.predict(X_val_s1.values))
+            model_info = mlflow.xgboost.log_model(
+                s1_model,
+                name="xgb_s1_model",
+                signature=signature,
+                registered_model_name=f"xgb_s1_{exchange}",
+            )
+            eval_data = pd.DataFrame(X_val_s1, columns=s1_features)
+            eval_data["label"] = df_val["is_big_move"].values
+
+            mlflow.models.evaluate(
+                model_info.model_uri,
+                eval_data,
+                targets="label",
+                model_type="classifier",
+            )
+
+        df_val_s1_predictions = s1_model.predict(df_val[s1_features].values)
+
+        with mlflow.start_run(run_name="xgb_stage2_s1_independent", nested=True):
+            s2_model_indep, s2_features_indep, s2_params_indep = train_xgb_stage2_s1_independent(
+                df_train, df_val, n_trials_s2
+            )
+            df_val_s2 = df_val.copy()
+            df_val_s2["s1_pred"] = df_val_s1_predictions
+            df_val_s2_filtered = df_val_s2[(df_val_s2["s1_pred"] == 1) & (df_val_s2["is_big_move"] == 1)]
+            X_val_s2 = df_val_s2_filtered[s2_features_indep].astype("float64")
+            signature = infer_signature(X_val_s2, s2_model_indep.predict(X_val_s2.values))
+            model_info = mlflow.xgboost.log_model(
+                s2_model_indep,
+                name="xgb_s2_s1_independent_model",
+                signature=signature,
+                registered_model_name=f"xgb_s2_independent_{exchange}",
+            )
+            eval_data = pd.DataFrame(X_val_s2, columns=s2_features_indep)
+            eval_data["label"] = df_val_s2_filtered["is_up"].values
+
+            mlflow.models.evaluate(
+                model_info.model_uri,
+                eval_data,
+                targets="label",
+                model_type="classifier",
+                extra_metrics=[precision_down_metric],
+            )
+
+        with mlflow.start_run(run_name="xgb_stage2_s1_dependent", nested=True):
+            s2_model_dep, s2_features_dep, s2_params_dep = train_xgb_stage2_s1_dependent(
+                df_train, df_val, s1_model, s1_features, n_trials_s2
+            )
+            df_val_s2_dep = df_val[df_val_s1_predictions == 1].copy()
+            if len(df_val_s2_dep) > 0:
+                X_val_s2_dep = df_val_s2_dep[s2_features_dep].astype("float64")
+                signature = infer_signature(X_val_s2_dep, s2_model_dep.predict(X_val_s2_dep.values))
+                model_info = mlflow.xgboost.log_model(
+                    s2_model_dep,
+                    name="xgb_s2_s1_dependent_model",
+                    signature=signature,
+                    registered_model_name=f"xgb_s2_dependent_{exchange}",
+                )
+                eval_data = pd.DataFrame(X_val_s2_dep, columns=s2_features_dep)
+                eval_data["label"] = df_val_s2_dep["is_up"].values
+
+                mlflow.models.evaluate(
+                    model_info.model_uri,
+                    eval_data,
+                    targets="label",
+                    model_type="classifier",
+                    extra_metrics=[precision_down_metric],
+                )
+
+    return XGBTrainingResult(
+        s1_model=s1_model,
+        s2_model_s1_independent=s2_model_indep,
+        s2_model_s1_dependent=s2_model_dep,
+        s1_features=s1_features,
+        s2_features_s1_independent=s2_features_indep,
+        s2_features_s1_dependent=s2_features_dep,
+        s1_params=s1_params,
+        s2_params_s1_independent=s2_params_indep,
+        s2_params_s1_dependent=s2_params_dep,
+    )
+```
+
+The overall structure is:
+
+- train stage 1 model (the one that focuses on recall)
+- train stage 2 model that doesn't depend on stage 1 outputs
+- train stage 2 model that depends on stage 1 outputs
+- log/register/evaluate models using mlflow function calls
+
+Down the rabbit hole we go, let's take a look at the final training functions:
+
+<b>Side note:</b> I need to censor my code, because otherwise you'd see the PI information I'm trying to keep away from public eye :)
+
+```python
+def get_selected_features(trial: optuna.Trial, groups: dict, min_groups: int = 2) -> list[str]:
+    """Select feature groups using Optuna trial suggestions."""
+    group_names = list(groups.keys())
+    selections = {}
+
+    for group_name in group_names:
+        selections[group_name] = trial.suggest_categorical(f"use_{group_name}", [True, False])
+
+    selected_count = sum(selections.values())
+
+    if selected_count < min_groups:
+        raise optuna.TrialPruned()
+
+    selected_features = []
+
+    for group_name, is_selected in selections.items():
+        if is_selected:
+            selected_features.extend(groups[group_name])
+
+    return selected_features
+
+
+def train_xgb_stage1(
+    df_train: pd.DataFrame,
+    df_val: pd.DataFrame,
+    n_trials: int = N_TRIALS_S1,
+    wf_folds: int = DEFAULT_WF_FOLDS,
+    wf_val_months: int = DEFAULT_WF_VAL_MONTHS,
+) -> tuple[xgb.XGBClassifier, list[str], dict]:
+    df_combined = pd.concat([df_train, df_val], ignore_index=True)
+    wf_splits = create_walk_forward_splits(df_combined, n_folds=wf_folds, val_months=wf_val_months)
+
+    def objective(trial):
+        selected_features = get_selected_features(trial, FEATURE_GROUPS_S1_XGB)
+        max_depth = trial.suggest_int("max_depth", 3, 12)
+        grow_policy = trial.suggest_categorical("grow_policy", ["depthwise", "lossguide"])
+        params = dict(max_depth=max_depth, grow_policy=grow_policy,
+                      learning_rate=trial.suggest_float("learning_rate", 0.005, 0.3, log=True),
+                      n_estimators=trial.suggest_int("n_estimators", 100, 600),
+                      min_child_weight=trial.suggest_int("min_child_weight", 1, 15),
+                      gamma=trial.suggest_float("gamma", 1e-8, 5.0, log=True),
+                      subsample=trial.suggest_float("subsample", 0.5, 1.0),
+                      colsample_bytree=trial.suggest_float("colsample_bytree", 0.5, 1.0),
+                      colsample_bylevel=trial.suggest_float("colsample_bylevel", 0.5, 1.0),
+                      reg_alpha=trial.suggest_float("reg_alpha", 1e-8, 10.0, log=True),
+                      reg_lambda=trial.suggest_float("reg_lambda", 1e-8, 10.0, log=True),
+                      max_delta_step=trial.suggest_int("max_delta_step", 0, 10), device="cuda", tree_method="hist",
+                      random_state=42, n_jobs=-1)
+
+        if grow_policy == "lossguide":
+            params["max_leaves"] = trial.suggest_int("max_leaves", 8, 256)
+
+        params["early_stopping_rounds"] = EARLY_STOPPING_ROUNDS
+        fold_scores = []
+
+        for fold in wf_splits:
+            fold_train_balanced = balance_binary_classes(fold.df_train, "xxx")
+            X_train = fold_train_balanced[selected_features].values
+            y_train = fold_train_balanced["xxx"].values
+            X_val = fold.df_val[selected_features].values
+            y_val = fold.df_val["xxx"].values
+            model = xgb.XGBClassifier(**params)
+
+            model.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
+
+            y_pred = model.predict(X_val)
+
+            fold_scores.append(_compute_s1_fold_score(y_val, y_pred))
+
+        return np.mean(fold_scores)
+
+    study = optuna.create_study(
+        direction="maximize",
+        pruner=optuna.pruners.MedianPruner(n_startup_trials=30, n_warmup_steps=15),
+        sampler=optuna.samplers.TPESampler(seed=42),
+    )
+
+    study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
+
+    best_params = study.best_trial.params
+    feature_params = {k: v for k, v in best_params.items() if k.startswith("use_")}
+    model_params = {k: v for k, v in best_params.items() if not k.startswith("use_")}
+    best_features = []
+
+    for group_name, features in FEATURE_GROUPS_S1_XGB.items():
+        if feature_params.get(f"use_{group_name}", False):
+            best_features.extend(features)
+
+    if len(best_features) == 0:
+        best_features = [f for group in FEATURE_GROUPS_S1_XGB.values() for f in group]
+
+    model_params.update(dict(device="cuda", tree_method="hist", random_state=42, n_jobs=-1,
+                             early_stopping_rounds=EARLY_STOPPING_ROUNDS))
+
+    df_train_balanced = balance_binary_classes(df_train, "xxx")
+    X_train = df_train_balanced[best_features].values
+    y_train = df_train_balanced["xxx"].values
+    X_eval = df_val[best_features].values
+    y_eval = df_val["xxx"].values
+    model = xgb.XGBClassifier(**model_params)
+
+    model.fit(X_train, y_train, eval_set=[(X_eval, y_eval)], verbose=False)
+    mlflow.log_metric("best_f1_score", study.best_trial.value)
+    mlflow.log_metric("n_features", len(best_features))
+    mlflow.log_param("features", best_features)
+
+    return model, best_features, model_params
+```
+
+As you can see, I'm giving optuna a really rich search space that contains the hyperparameters, and features (I have around 50 features). Then I'm balancing the classes and kicking off the training. There's also some pruning and early stopping in place to speed up the training and prevent the overfitting if the loss is not improving. 
+
+As for the sampler, I defaulted to the popular choice of picking the `TPESampler`. In my case `GridSampler` wouldn't do any good, because the search space is too big, `CmaEsSampler` is good for continuous spaces which is not the case here, and `GPSampler`... Well, I could have used it, but it's also slower than `TPESampler`. Briefly: it's a class that uses bayesian optimization technique to gradually narrow down the search space to the most promising areas. [This dude will explain it best](https://www.youtube.com/watch?v=bcy6A57jAwI). 
+
+I'm also using a custom loss function to better focus on the objective:
+
+```python
+def _compute_s1_fold_score(y_val: np.ndarray, y_pred: np.ndarray) -> float:
+    precision = precision_score(y_val, y_pred, pos_label=1, zero_division=0)
+    recall = recall_score(y_val, y_pred, pos_label=1, zero_division=0)
+
+    if precision < MIN_PRECISION_S1:
+        return precision * 0.1
+
+    score = f1_score(y_val, y_pred, pos_label=1, zero_division=0)
+
+    if recall > MAX_RECALL_S1:
+        penalty = (recall - MAX_RECALL_S1) / (1.0 - MAX_RECALL_S1)
+        score *= (1.0 - penalty) ** 2
+
+    return score
+```
+
+If you've been doing machine learning for some time, you may know the sklearn's [`fbeta_score` function](https://scikit-learn.org/stable/modules/generated/sklearn.metrics.fbeta_score.html). At first I was thinking about using it to move the weight towards recall, but it wasn't entirely what I wanted, and what I wanted was to have something with nonlinear/thresholding characteristic. `fbeta_score` does this:
+
+- &beta; < 1 - it will favor precision
+- &beta; > 1 - it will favor recall
+
+What my implementation does is something different. If precision is below 0.3, then it punishes the model heavily by returning 10% of the already small precision score. On the other hand if the recall is too high, it applies a little less harsh penalty onto the f1 score. This expresses the intent of obtaining a model that will work like a not very dense fish net - it's ok to catch a lot of flotsam and jetsam if we also catch a lot of fish.
+
+Stage 2 training functions are 95% the same. The only difference is that their target variable is a bit different (although related) from stage 1 training target variable. I'm also using a different loss function for them, and after many trials I noticed that some features are more often picked up by stage 2, so that training phase is now using a constrained set of features - no point in making the training too long by making optuna search through garbage, right?
+
+## Stacking methods
+
+Before I explain stacking, I'll tell you how I implemented result reconciliation/aggregation with the two-stage, three-model-per-stage approach: I used ensembling.
+
+...and before that I'll tell you what do I mean by that, I'll just drop a bomb: ensembles didn't always outperform single models. But they usually did :)
+
+So, in my case ensembling meant... Actually just read the damned code:
+
+```python
+# ENSEMBLE_AVG
+# S1:
+avg_proba = (xgb_s1_proba + lgbm_s1_proba + catboost_s1_proba) / 3                                                  
+df_eval["s1_pred_xxx"] = (avg_proba > 0.5).astype(int)
+
+# S2:
+df_eval["s2_avg_proba"] = (xgb_proba + lgbm_proba + catboost_proba) / 3
+df_eval["xxx"] = (s1_pred == 1) & (s2_avg_proba >= 0.5)
+
+```
+
+Intuition: the probability of the three models is averaged. If the mean is > 0.5 -> prediction == True. It's a somewhat "democratic" way of voting on what the result will be returned as.
+
+```python
+# ENSEMBLE_AND
+# S1:
+df_eval["s1_pred_xxx"] = (xgb_s1_pred & lgbm_s1_pred & catboost_s1_pred).astype(int)
+df_eval["s1_pred_proba"] = np.minimum(np.minimum(xgb_proba, lgbm_proba), catboost_proba)
+
+# S2:
+df_eval["xxx"] = (s1_pred == 1) & (xgb_pred == 1) & (lgbm_pred == 1) & (catboost_pred == 1)
+df_eval["s2_pred_proba"] = df_eval[["s2_xgb_proba", "s2_lgbm_proba", "s2_catboost_proba"]].min(axis=1)
+```
+
+Intuition: all models need to agree, and the probability is a minimum out of all three. It's a more conservative approach that will generate a lower number of signals.
+
+Ok, so it's all cool, but can this be made better? Turns out it can - with stacking. 
+
+The problem with ENSEMBLE_AVG and ENSEMBLE_AND is that they treat all models equally. But what if XGBoost is consistently better at detecting certain patterns while CatBoost excels at others? What if LightGBM tends to be overconfident?                                                                                                      
+                  
+With simple averaging, you're essentially saying: "I trust all three of you equally." and that's somewhat naive.
+
+With stacking, instead of hardcoding how to combine predictions, you train another model (the"meta-model") to learn the optimal combination:
+
+```python
+# Step 1: Get probability predictions from all base models
+meta_features = np.column_stack([
+    xgb_proba,      # XGBoost's confidence
+    lgbm_proba,     # LightGBM's confidence
+    catboost_proba  # CatBoost's confidence
+])
+
+# Step 2: Train a meta-model on these "meta-features"
+meta_model.fit(meta_features, actual_labels)
+
+# Step 3: At inference time
+final_prediction = meta_model.predict(meta_features)
+```
+
+The meta-model can learn things like:
+- "When XGBoost says 0.9 but the other two say 0.3, trust XGBoost"
+- "When all three hover around 0.5-0.6, it's probably noise - predict 0"
+- "CatBoost's 0.7 is worth more than LightGBM's 0.8"
+
+In my implementation, I tried two meta-model types: Logistic Regression (essentially learned linear weights) and XGBoost (can capture non-linear interactions between base model predictions). The system picks whichever performs better on validation data.
+
+One gotcha: you can't train the meta-model on the same data the base models saw - they'd be overfit and the meta-model would learn to trust their memorization. That's why I used out-of-fold (OOF) predictions: train base models on fold 1-4, predict on fold 5, repeat for all folds, then train meta-model on those "honest" predictions.
+
+```python
+def _train_stacking_meta_models(
+    df_train: pd.DataFrame,
+    df_val: pd.DataFrame,
+    xgb_result,
+    lgbm_result,
+    catboost_result,
+    exchange: str,
+    parent_run_id: str | None = None,
+) -> StackingMetaModelsResult:
+    with mlflow.start_run(run_name="stacking_meta", nested=True, parent_run_id=parent_run_id):
+        mlflow.log_param("exchange", exchange)
+        mlflow.log_param("meta_feature_names", META_FEATURE_NAMES)
+
+        # Generate OOF predictions for S1
+        with mlflow.start_run(run_name="stacking_meta_s1", nested=True):
+            train_meta_s1, train_labels_s1, val_meta_s1, val_labels_s1 = generate_oof_predictions(
+                df_train=df_train,
+                df_val=df_val,
+                xgb_model=xgb_result.s1_model,
+                lgbm_model=lgbm_result.s1_model,
+                catboost_model=catboost_result.s1_model,
+                xgb_features=xgb_result.s1_features,
+                lgbm_features=lgbm_result.s1_features,
+                catboost_features=catboost_result.s1_features,
+                target_col="xxx",
+            )
+            meta_s1_result = train_meta_model_s1(train_meta_s1, train_labels_s1, val_meta_s1, val_labels_s1)
+            meta_s1_info = _log_meta_model_to_mlflow(meta_s1_result, val_meta_s1, "s1", exchange)
+            meta_s1 = meta_s1_result.winner.meta_model
+
+        df_train_s2 = df_train[df_train["xxx"] == 1].copy()
+        df_val_s2 = df_val[df_val["xxx"] == 1].copy()
+
+        # S2 Independent
+        if len(df_train_s2) >= 50 and len(df_val_s2) >= 20:
+            with mlflow.start_run(run_name="stacking_meta_s2_s1_independent", nested=True):
+                train_meta_s2_indep, train_labels_s2_indep, val_meta_s2_indep, val_labels_s2_indep = generate_oof_predictions(
+                    df_train=df_train_s2,
+                    df_val=df_val_s2,
+                    xgb_model=xgb_result.s2_model_s1_independent,
+                    lgbm_model=lgbm_result.s2_model_s1_independent,
+                    catboost_model=catboost_result.s2_model_s1_independent,
+                    xgb_features=xgb_result.s2_features_s1_independent,
+                    lgbm_features=lgbm_result.s2_features_s1_independent,
+                    catboost_features=catboost_result.s2_features_s1_independent,
+                    target_col="is_up",
+                )
+                meta_s2_indep_result = train_meta_model_s2(
+                    train_meta_s2_indep, train_labels_s2_indep, val_meta_s2_indep, val_labels_s2_indep
+                )
+                meta_s2_indep_info = _log_meta_model_to_mlflow(
+                    meta_s2_indep_result, val_meta_s2_indep, "s2_s1_independent", exchange
+                )
+                meta_s2_indep = meta_s2_indep_result.winner.meta_model
+        else:
+            meta_s2_indep = None
+            meta_s2_indep_info = None
+            mlflow.log_param("s2_s1_independent_skipped", True)
+            mlflow.log_param("s2_s1_independent_skip_reason", f"train={len(df_train_s2)}, val={len(df_val_s2)}")
+
+        # S2 Dependent
+        train_s1_pred = xgb_result.s1_model.predict(df_train[xgb_result.s1_features].values)
+        val_s1_pred = xgb_result.s1_model.predict(df_val[xgb_result.s1_features].values)
+        df_train_s2_dep = df_train[train_s1_pred == 1].copy()
+        df_val_s2_dep = df_val[val_s1_pred == 1].copy()
+
+        if len(df_train_s2_dep) >= 50 and len(df_val_s2_dep) >= 20:
+            with mlflow.start_run(run_name="stacking_meta_s2_s1_dependent", nested=True):
+                train_meta_s2_dep, train_labels_s2_dep, val_meta_s2_dep, val_labels_s2_dep = generate_oof_predictions(
+                    df_train=df_train_s2_dep,
+                    df_val=df_val_s2_dep,
+                    xgb_model=xgb_result.s2_model_s1_dependent,
+                    lgbm_model=lgbm_result.s2_model_s1_dependent,
+                    catboost_model=catboost_result.s2_model_s1_dependent,
+                    xgb_features=xgb_result.s2_features_s1_dependent,
+                    lgbm_features=lgbm_result.s2_features_s1_dependent,
+                    catboost_features=catboost_result.s2_features_s1_dependent,
+                    target_col="xxx",
+                )
+                meta_s2_dep_result = train_meta_model_s2(
+                    train_meta_s2_dep, train_labels_s2_dep, val_meta_s2_dep, val_labels_s2_dep
+                )
+                meta_s2_dep_info = _log_meta_model_to_mlflow(
+                    meta_s2_dep_result, val_meta_s2_dep, "s2_s1_dependent", exchange
+                )
+                meta_s2_dep = meta_s2_dep_result.winner.meta_model
+        else:
+            meta_s2_dep = None
+            meta_s2_dep_info = None
+            mlflow.log_param("s2_s1_dependent_skipped", True)
+            mlflow.log_param("s2_s1_dependent_skip_reason", f"train={len(df_train_s2_dep)}, val={len(df_val_s2_dep)}")
+
+    return StackingMetaModelsResult(
+        meta_s1=meta_s1,
+        meta_s2_indep=meta_s2_indep,
+        meta_s2_dep=meta_s2_dep,
+        meta_s1_info=meta_s1_info,
+        meta_s2_indep_info=meta_s2_indep_info,
+        meta_s2_dep_info=meta_s2_dep_info,
+    )
+```
+
+That's a lot of code, but it's rather simple - it just trains meta models for each of the stages. What's more interesting is the generate_oof_predictions function:
+
+```python
+def generate_oof_predictions(
+    df_train: pd.DataFrame,
+    df_val: pd.DataFrame,
+    xgb_model,
+    lgbm_model,
+    catboost_model,
+    xgb_features: list[str],
+    lgbm_features: list[str],
+    catboost_features: list[str],
+    target_col: str,
+    n_folds: int = N_META_FOLDS,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    y_train = df_train[target_col].values
+    y_val = df_val[target_col].values
+    n_train = len(df_train)
+    xgb_oof = np.zeros(n_train)
+    lgbm_oof = np.zeros(n_train)
+    catboost_oof = np.zeros(n_train)
+    skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=42)
+
+    for fold_idx, (train_idx, val_idx) in enumerate(skf.split(df_train, y_train)):
+        fold_train = df_train.iloc[train_idx]
+        fold_val = df_train.iloc[val_idx]
+        fold_train_balanced = balance_binary_classes(fold_train, target_col)
+        fold_y_train_balanced = fold_train_balanced[target_col].values
+        X_fold_train_xgb = fold_train_balanced[xgb_features].values
+        X_fold_val_xgb = fold_val[xgb_features].values
+        fold_xgb = xgb.XGBClassifier(
+            **{k: v for k, v in xgb_model.get_params().items()
+               if k not in ['early_stopping_rounds', 'callbacks']},
+            early_stopping_rounds=30,
+        )
+
+        fold_xgb.fit(
+            X_fold_train_xgb, fold_y_train_balanced,
+            eval_set=[(X_fold_val_xgb, fold_val[target_col].values)],
+            verbose=False,
+        )
+
+        xgb_oof[val_idx] = fold_xgb.predict_proba(X_fold_val_xgb)[:, 1]
+        X_fold_train_lgbm = fold_train_balanced[lgbm_features].astype("float32")
+        X_fold_val_lgbm = fold_val[lgbm_features].astype("float32")
+        fold_lgbm = lgb.LGBMClassifier(
+            **{k: v for k, v in lgbm_model.get_params().items() if k != 'callbacks'}
+        )
+
+        fold_lgbm.fit(
+            X_fold_train_lgbm, fold_y_train_balanced,
+            eval_set=[(X_fold_val_lgbm, fold_val[target_col].values)],
+            callbacks=[lgb.early_stopping(30, verbose=False)],
+        )
+
+        lgbm_oof[val_idx] = fold_lgbm.predict_proba(X_fold_val_lgbm)[:, 1]
+
+        X_fold_train_cb = fold_train_balanced[catboost_features].values
+        X_fold_val_cb = fold_val[catboost_features].values
+        cb_params = dict(catboost_model.get_params())
+
+        cb_params.update(early_stopping_rounds=30, verbose=False, train_dir=None)
+
+        fold_cb = CatBoostClassifier(**cb_params)
+
+        fold_cb.fit(
+            X_fold_train_cb, fold_y_train_balanced,
+            eval_set=(X_fold_val_cb, fold_val[target_col].values),
+        )
+
+        catboost_oof[val_idx] = fold_cb.predict_proba(X_fold_val_cb)[:, 1]
+
+    train_meta_features = create_meta_features(xgb_oof, lgbm_oof, catboost_oof)
+    X_val_xgb = df_val[xgb_features].values
+    X_val_lgbm = df_val[lgbm_features].astype("float32")
+    X_val_cb = df_val[catboost_features].values
+    xgb_val_proba = xgb_model.predict_proba(X_val_xgb)[:, 1]
+    lgbm_val_proba = lgbm_model.predict_proba(X_val_lgbm)[:, 1]
+    catboost_val_proba = catboost_model.predict_proba(X_val_cb)[:, 1]
+    val_meta_features = create_meta_features(xgb_val_proba, lgbm_val_proba, catboost_val_proba)
+
+    return train_meta_features, y_train, val_meta_features, y_val
+```
+
+The generate_oof_predictions function takes training data, validation data, and the three trained base models.
+                                                                                                                      
+For training data, it splits into 5 folds. In each iteration, it trains fresh copies of all three models on 4 folds and predicts on the remaining fold. After 5 iterations, every training sample has a prediction from a model that never saw it.
+
+For validation data, it just uses the original models directly - they never saw this data during training anyway, so no special treatment needed.
+
+Finally, it combines the raw probabilities from all three models into "meta-features": the three probabilities themselves, plus their mean, max, min, and an "agreement score" (what fraction of models said yes). Seven features total that the meta-model will learn from.
+
+## Evaluation
+
+The last step in my pipeline evaluates all the trained models. Again, I won't attach the full code, as it's highly repetitive and boring. I'll only show what's the most important - a function that computes a result telling me if the given model pipeline gives me an edge in day trading:
+
+```python
+def _compute_ranking_scores(evaluations: list["PipelineEvaluation"]) -> list["PipelineEvaluation"]:
+    """
+    Compute ranking-based scores for all pipeline evaluations.
+
+    For each metric, pipelines are ranked and receive points based on position.
+    Place 1 = N points, place N = 1 point (where N = number of pipelines).
+
+    Modifiers:
+    - 1st place in median return: +3 bonus points
+    - Bias penalty: up to -BIAS_PENALTY_MULTIPLIER points for heavily skewed predictions
+      (penalizes models that predict almost all up or almost all down)
+    """
+    valid_evals = [(i, e) for i, e in enumerate(evaluations) if "error" not in e.metrics]
+    error_indices = {i for i, e in enumerate(evaluations) if "error" in e.metrics}
+
+    if not valid_evals:
+        return evaluations
+
+    n = len(valid_evals)
+    scores = {i: 0.0 for i, _ in valid_evals}
+    ranking_metrics = [
+        ("win_rate", True),
+        ("precision", True),
+        ("median_return", True),
+        ("monthly_sharpe", True),
+        ("confidence_return_corr", True),
+        ("outlier_contribution", True),
+        ("median_return_top10", True),
+        ("precision_top10", True),
+    ]
+    median_return_ranks = {}
+
+    for metric_name, higher_is_better in ranking_metrics:
+        values = [(i, e.metrics.get(metric_name, 0)) for i, e in valid_evals]
+
+        values.sort(key=lambda x: x[1], reverse=higher_is_better)
+
+        for rank, (idx, _) in enumerate(values):
+            points = n - rank
+            scores[idx] += points
+
+            if metric_name == "median_return":
+                median_return_ranks[idx] = rank
+
+    for idx, evaluation in valid_evals:
+        if median_return_ranks.get(idx) == 0:
+            scores[idx] += MEDIAN_RETURN_BONUS
+
+    # Apply bias penalty only for extremely skewed predictions (< 20% or > 80%)
+    for idx, evaluation in valid_evals:
+        s2_up_ratio = evaluation.metrics.get("s2_up_ratio", 0.5)
+
+        if s2_up_ratio < BIAS_PENALTY_THRESHOLD:
+            # Penalty grows from 0 (at 20%) to BIAS_PENALTY_MULTIPLIER (at 0%)
+            bias_penalty = (BIAS_PENALTY_THRESHOLD - s2_up_ratio) / BIAS_PENALTY_THRESHOLD * BIAS_PENALTY_MULTIPLIER
+            scores[idx] -= bias_penalty
+        elif s2_up_ratio > (1 - BIAS_PENALTY_THRESHOLD):
+            # Penalty grows from 0 (at 80%) to BIAS_PENALTY_MULTIPLIER (at 100%)
+            bias_penalty = (s2_up_ratio - (1 - BIAS_PENALTY_THRESHOLD)) / BIAS_PENALTY_THRESHOLD * BIAS_PENALTY_MULTIPLIER
+            scores[idx] -= bias_penalty
+
+    updated_evals = []
+
+    for i, evaluation in enumerate(evaluations):
+        if i in error_indices:
+            new_score = -1.0
+        else:
+            new_score = scores[i]
+
+        updated_evals.append(PipelineEvaluation(
+            s1_mode=evaluation.s1_mode,
+            s2_mode=evaluation.s2_mode,
+            s2_training_mode=evaluation.s2_training_mode,
+            metrics=evaluation.metrics,
+            validation=evaluation.validation,
+            score=new_score,
+            has_edge=evaluation.has_edge,
+        ))
+
+    return updated_evals
+```
+
+I'll unpack some of the `ranking_metrics` and wrap-up this lengthy post:
+
+- `win_rate` - this tells me how often the models are correct, on average
+- `monthly_sharpe` - it's a simplified version of the Sharpe ratio - high Sharpe means stable, predictable gains; low Sharpe means wild swings between months
+- `confidence_return_corr` - this one is actually the most important one as it informs me on the correlation between a model predicting with a high probability and actually observing the expected outcome
+
+## Summary
+
+And that would be it! In 2025 I read a book about passive investing and the author said that speculative investing rarely beats passive investing, and if it does - it's not stable. There are traders that can "beat the market" by 50% one year and loose all their money the next year. Well... He's probably right, however, with the strategy I developed I'm hoping not to be one of the ones loosing all their money!
