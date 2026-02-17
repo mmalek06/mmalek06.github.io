@@ -320,5 +320,129 @@ I think it's rather cleanly written, but just for completeness, the most importa
 1. start mlflow run under which all will be put
 2. train the models
 3. run evaluation
-  3.1 evaluate the models on test data
-  3.2 save the best models (which I'm calling pipeline here)
+    - evaluate the models on test data
+    - save the best models (which I'm calling pipeline here)
+
+```python
+async def _train_models_only(
+    months_of_data: int,
+    val_months: int,
+    test_months: int,
+    n_trials_s1: int,
+    n_trials_s2: int,
+    exchange: str | None,
+    parent_run_id: str | None = None,
+    data_to: date | None = None,
+) -> tuple[TrainedModels, pd.DataFrame]:
+    data: PreparedData = await prepare_data(
+        months_of_data=months_of_data,
+        val_months=val_months,
+        test_months=test_months,
+        exchange=exchange,
+        data_to=data_to,
+    )
+    trained_models = await _train_on_prepared_data(
+        data=data,
+        exchange=exchange,
+        n_trials_s1=n_trials_s1,
+        n_trials_s2=n_trials_s2,
+        parent_run_id=parent_run_id,
+    )
+
+    return trained_models, data.df_test
+```
+
+The `prepare_data` function is very lengthy and has a lot of details strictly related to what I'm NOT trying to include in this post, so I'll omit it. The only important detail is its return type:
+
+```python
+class PreparedData(NamedTuple):
+    df_train: pd.DataFrame
+    df_val: pd.DataFrame
+    df_test: pd.DataFrame
+    daily_stock_data: pd.DataFrame
+```
+
+As for the other function:
+
+```python
+async def _train_on_prepared_data(
+    data: PreparedData,
+    exchange: str | None,
+    n_trials_s1: int,
+    n_trials_s2: int,
+    parent_run_id: str | None = None,
+) -> TrainedModels:
+    exchange_for_registry = exchange or "combined"
+
+    # Train XGBoost first (uses GPU)
+    xgb_result = await asyncio.to_thread(
+        train_xgb_models,
+        df_train=data.df_train,
+        df_val=data.df_val,
+        exchange=exchange_for_registry,
+        n_trials_s1=n_trials_s1,
+        n_trials_s2=n_trials_s2,
+        parent_run_id=parent_run_id,
+    )
+
+    # Then train CatBoost (GPU) and LGBM (CPU) in parallel - no GPU memory conflict
+    lgbm_result, catboost_result = await asyncio.gather(
+        asyncio.to_thread(
+            train_lgbm_models,
+            df_train=data.df_train,
+            df_val=data.df_val,
+            exchange=exchange_for_registry,
+            n_trials_s1=n_trials_s1,
+            n_trials_s2=n_trials_s2,
+            parent_run_id=parent_run_id,
+        ),
+        asyncio.to_thread(
+            train_catboost_models,
+            df_train=data.df_train,
+            df_val=data.df_val,
+            exchange=exchange_for_registry,
+            n_trials_s1=n_trials_s1,
+            n_trials_s2=n_trials_s2,
+            parent_run_id=parent_run_id,
+        ),
+    )
+
+    # Train stacking meta-models
+    stacking_result = _train_stacking_meta_models(
+        df_train=data.df_train,
+        df_val=data.df_val,
+        xgb_result=xgb_result,
+        lgbm_result=lgbm_result,
+        catboost_result=catboost_result,
+        exchange=exchange_for_registry,
+        parent_run_id=parent_run_id,
+    )
+
+    return TrainedModels(
+        xgb_model_s1=xgb_result.s1_model,
+        xgb_model_s2_s1_independent=xgb_result.s2_model_s1_independent,
+        xgb_model_s2_s1_dependent=xgb_result.s2_model_s1_dependent,
+        lgbm_model_s1=lgbm_result.s1_model,
+        lgbm_model_s2_s1_independent=lgbm_result.s2_model_s1_independent,
+        lgbm_model_s2_s1_dependent=lgbm_result.s2_model_s1_dependent,
+        catboost_model_s1=catboost_result.s1_model,
+        catboost_model_s2_s1_independent=catboost_result.s2_model_s1_independent,
+        catboost_model_s2_s1_dependent=catboost_result.s2_model_s1_dependent,
+        xgb_features_s1=xgb_result.s1_features,
+        xgb_features_s2_s1_independent=xgb_result.s2_features_s1_independent,
+        xgb_features_s2_s1_dependent=xgb_result.s2_features_s1_dependent,
+        lgbm_features_s1=lgbm_result.s1_features,
+        lgbm_features_s2_s1_independent=lgbm_result.s2_features_s1_independent,
+        lgbm_features_s2_s1_dependent=lgbm_result.s2_features_s1_dependent,
+        catboost_features_s1=catboost_result.s1_features,
+        catboost_features_s2_s1_independent=catboost_result.s2_features_s1_independent,
+        catboost_features_s2_s1_dependent=catboost_result.s2_features_s1_dependent,
+        exchange=exchange,
+        stacking_meta_s1=stacking_result.meta_s1,
+        stacking_meta_s2_s1_independent=stacking_result.meta_s2_indep,
+        stacking_meta_s2_s1_dependent=stacking_result.meta_s2_dep,
+        stacking_meta_s1_info=stacking_result.meta_s1_info,
+        stacking_meta_s2_s1_independent_info=stacking_result.meta_s2_indep_info,
+        stacking_meta_s2_s1_dependent_info=stacking_result.meta_s2_dep_info,
+    )
+```
