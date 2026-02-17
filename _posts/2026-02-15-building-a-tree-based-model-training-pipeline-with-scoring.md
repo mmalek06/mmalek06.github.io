@@ -253,5 +253,72 @@ Before I jump on the code, I'll show you how the experiment is saved in mlflow -
 
 <p>
     <img src="https://mmalek06.github.io/images/mlflow_with_models_collapsed.png">
+    <br />
     <img src="https://mmalek06.github.io/images/mlflow_with_models_expanded.png">
 </p>
+
+The first image shows all the steps and the second one includes the model training substeps. There are two stages in the training, like I mentioned in the requirements section of this post, but what I didn't mention there is that the second stage also has two branches. The dependent model trains on the outputs from s1 model and the independent one, well, it's independent so it trains on the same data that's used by s1 training, but it optimizes for a different metric.
+
+After all base models are trained, I'm also training some stacking meta-models that are supposed to further improve the initial predictions.
+
+Now the main training function:
+
+```python
+async def train_full_pipeline(
+        exchange: str,
+        months_of_data: int,
+        val_months: int = 12,
+        test_months: int = 12,
+        n_trials_s1: int = 350,
+        n_trials_s2: int = 350,
+        data_to: date | None = None,
+) -> PipelineResult:
+    run_name = f"full_pipeline_{exchange}"
+
+    with mlflow.start_run(run_name=run_name) as run:
+        mlflow.log_params(dict(
+            months_of_data=months_of_data,
+            val_months=val_months,
+            test_months=test_months,
+            n_trials_s1=n_trials_s1,
+            n_trials_s2=n_trials_s2,
+            exchange=exchange,
+        ))
+        if data_to is not None:
+            mlflow.log_param("data_to", str(data_to))
+
+        trained_models, df_test = await _train_models_only(
+            months_of_data=months_of_data,
+            val_months=val_months,
+            test_months=test_months,
+            n_trials_s1=n_trials_s1,
+            n_trials_s2=n_trials_s2,
+            exchange=exchange,
+            parent_run_id=run.info.run_id,
+            data_to=data_to,
+        )
+
+        with mlflow.start_run(run_name="evaluation", nested=True):
+            all_evaluations = evaluate_models_on_data(trained_models, df_test)
+            best = select_best_pipeline(all_evaluations)
+
+            _log_evaluation_to_mlflow(all_evaluations, best, trained_models)
+
+    return PipelineResult(
+        trained_models=trained_models,
+        best_s1_mode=best.s1_mode,
+        best_s2_mode=best.s2_mode,
+        best_s2_training_mode=best.s2_training_mode,
+        all_evaluations=all_evaluations,
+        best_metrics=best.metrics,
+        best_validation=best.validation,
+    )
+```
+
+I think it's rather cleanly written, but just for completeness, the most important parts are:
+
+1. start mlflow run under which all will be put
+2. train the models
+3. run evaluation
+  3.1 evaluate the models on test data
+  3.2 save the best models (which I'm calling pipeline here)
