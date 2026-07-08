@@ -15,7 +15,7 @@ The second point: think about RAG systems. Maybe yours is not that good, and use
 
 And the third point: maybe you're trying to apply a patching strategy to some textual data, but you notice that a single change request may relate to a bunch of text fragments dispersed across different pages?
 
-This library is trying to address all those pain points! In this post, though, I'll only describe briefly how to use it, and go into the technical details in later posts :)
+This library is trying to address all those pain points! The code lives on GitHub at [github.com/mmalek06/text_change_detector](https://github.com/mmalek06/text_change_detector). In this post, though, I'll only describe briefly how to use it, and go into the technical details in later posts :)
 
 ## Enough talk, let me run it on a real statute
 
