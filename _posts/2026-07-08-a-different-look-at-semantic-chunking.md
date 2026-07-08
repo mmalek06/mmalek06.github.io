@@ -3,7 +3,7 @@ layout: post
 title: "A different look at semantic chunking"
 date: 2026-07-08 00:00:00 -0000
 categories:
-    - sentence-transformers
+    - semantic-text-tiling
 tags: ["numpy", "sentence-transformers", "embeddings"]
 ---
 
